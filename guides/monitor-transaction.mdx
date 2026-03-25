@@ -1,6 +1,7 @@
 ---
 title: "Monitor Transactions"
 description: "Production patterns for consuming the MonitorTransaction streaming RPC: lifecycle states, reconnection, backoff, and terminal state handling."
+mode: "wide"
 ---
 
 MonitorTransaction is a server-streaming RPC — the server pushes status updates until the transaction reaches a terminal state. This guide covers production usage: understanding the full lifecycle, handling every terminal outcome, and reconnecting reliably when the stream drops.
