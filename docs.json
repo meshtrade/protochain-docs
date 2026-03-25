@@ -1,6 +1,6 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "linden",
+  "theme": "willow",
   "name": "Protochain Documentation",
   "colors": {
     "primary": "#6367FF",
