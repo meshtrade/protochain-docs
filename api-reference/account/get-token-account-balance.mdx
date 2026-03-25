@@ -1,0 +1,73 @@
+---
+title: "GetTokenAccountBalance"
+description: "Get the raw token balance of a Solana token holding account."
+---
+
+Returns the token balance of a token holding account. The balance is returned as a raw integer string — divide by 10^decimals to get the human-readable amount.
+
+<Note>
+  Pass the **token holding account** address, not your wallet address.
+  Use [GetAssociatedTokenAddress](/api-reference/account/get-associated-token-address) to find the token account address from a wallet address and mint.
+</Note>
+
+## Request
+
+<ResponseField name="address" type="Base58-encoded public key (string)" required>
+  Address of the token holding account (not the wallet/owner address).
+</ResponseField>
+
+<ResponseField name="commitment_level" type="CommitmentLevel (enum)">
+  Optional. Ledger state to query. Defaults to CONFIRMED.
+</ResponseField>
+
+import CommitmentLevelNote from "/snippets/commitment-level-note.mdx";
+<CommitmentLevelNote />
+
+## Response
+
+<ResponseField name="amount" type="Raw integer as a decimal string (string)">
+  Token balance as a raw integer string, not adjusted for decimals. To get the human-readable balance: `amount / (10 ^ decimals)`.
+</ResponseField>
+
+<ResponseField name="decimals" type="uint32">
+  Number of decimal places defined by the token's mint. For example, USDC uses 6 decimals.
+</ResponseField>
+
+<Info>
+  Example: `amount = "1000000"` with `decimals = 6` equals 1.0 token.
+</Info>
+
+## Code Examples
+
+<CodeGroup>
+```go Go
+resp, err := client.GetTokenAccountBalance(ctx, &account_v1.GetTokenAccountBalanceRequest{
+    Address: "TokenAccountAddress1111111111111111111111111",
+})
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Printf("Raw balance: %s\n", resp.Amount)
+fmt.Printf("Decimals: %d\n", resp.Decimals)
+// Human-readable: parse amount and divide by 10^decimals
+```
+```rust Rust
+let response = client.get_token_account_balance(tonic::Request::new(
+    GetTokenAccountBalanceRequest {
+        address: "TokenAccountAddress1111111111111111111111111".to_string(),
+        ..Default::default()
+    }
+)).await?;
+let inner = response.into_inner();
+println!("Raw balance: {}", inner.amount);
+println!("Decimals: {}", inner.decimals);
+```
+```typescript TypeScript
+const req = new GetTokenAccountBalanceRequest();
+req.setAddress("TokenAccountAddress1111111111111111111111111");
+client.getTokenAccountBalance(req, (err, response) => {
+  console.log("Raw balance:", response.getAmount());
+  console.log("Decimals:", response.getDecimals());
+});
+```
+</CodeGroup>

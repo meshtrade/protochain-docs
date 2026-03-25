@@ -1,0 +1,54 @@
+---
+title: "Instructions and Transactions"
+description: "How instructions from the System Program and Token Program services compose into Protochain transactions."
+---
+
+In Protochain, transactions are built by composing instructions. The System Program Service and Token Program Service act as instruction factories — each method call returns a `SolanaInstruction` (or a list of them) that you add to a draft transaction. The instructions are not executed when you call these methods; execution happens when you compile, sign, and submit the transaction via the Transaction Service.
+
+## What is a SolanaInstruction?
+
+A `SolanaInstruction` is a serializable description of a single operation on the Solana blockchain. It contains three fields that matter:
+
+**`program_id`** — The on-chain program that will execute this instruction. For example, a SOL transfer uses the System Program address; a token mint operation uses the SPL Token or Token-2022 program address. The Solana runtime routes the instruction to the correct program.
+
+**`accounts`** — The accounts this instruction reads from or writes to. Each account entry carries `is_signer` and `is_writable` flags that the Solana runtime enforces. If an account marked `is_signer` hasn't signed the transaction, the transaction fails.
+
+**`data`** — The serialized parameters the program receives when the instruction executes. The encoding is program-specific. You don't need to construct this manually — the System Program and Token Program services build it for you.
+
+You don't construct `SolanaInstruction` manually. You call a service method and receive the instruction back, ready to include in a transaction.
+
+## Building a transaction from instructions
+
+The instruction builder pattern works like this:
+
+You have a goal — for example, transfer SOL from account A to account B.
+
+You call the System Program Service's `Transfer` method with the source address, destination address, and amount. This returns a `SolanaInstruction`. Nothing has happened on-chain yet. The service has built the instruction description, not executed anything.
+
+You put that instruction into a `Transaction` message in `DRAFT` state. The transaction holds your instructions until you're ready to compile.
+
+You pass the draft transaction to `CompileTransaction`. The API serializes the instructions into the Solana wire format, attaches a `recent_blockhash`, and moves the transaction to `COMPILED` state.
+
+You sign and submit the transaction. When the transaction lands on-chain, the Solana runtime reads each instruction, routes it to the designated program, and executes it. That's when the SOL transfer actually happens.
+
+This is the instruction builder pattern: the program services build instructions; the Transaction Service executes them.
+
+## Multi-instruction transactions
+
+A single transaction can contain multiple instructions. They execute atomically — either all succeed or all fail. This is how complex operations are composed:
+
+- Create a new token account and transfer tokens into it in one transaction.
+- Create an account and initialize it with program data in a single step.
+- Bundle multiple transfers together so they either all complete or none do.
+
+There is no special API for multi-instruction transactions. You add multiple `SolanaInstruction` entries to the `instructions` field of your `Transaction` message before compiling.
+
+## Why this design?
+
+This separation of "build" from "execute" mirrors how native Solana transactions work at the protocol level. Protochain exposes this model directly rather than hiding it behind a higher-level abstraction.
+
+The practical benefits: you can combine instructions from multiple programs in a single atomic transaction, estimate fees before committing, and simulate execution against the current ledger state before submitting. None of that is possible if building and executing are bundled together.
+
+---
+
+See the [System Program Service](/api-reference/system-program/overview) and [Token Program Service](/api-reference/token-program/overview) references for the full list of instruction builder methods.

@@ -1,0 +1,77 @@
+---
+title: "EstimateTransaction"
+description: "Estimate compute units and fee lamports for a compiled transaction."
+---
+
+import CommitmentLevelNote from "/snippets/commitment-level-note.mdx";
+
+Estimates the compute units and fees required to execute a compiled transaction. This is a read-only call — it does not change transaction state.
+
+<Note>
+  Estimates are based on current network conditions and may change between estimation and submission.
+  To apply estimates: set `config.compute_unit_limit` and `config.compute_unit_price` on the transaction before signing.
+</Note>
+
+## Request
+
+<ResponseField name="transaction" type="Transaction (object)" required>
+  A compiled transaction in COMPILED state.
+</ResponseField>
+
+<ResponseField name="commitment_level" type="CommitmentLevel (enum)">
+  Optional. Commitment level used for priority fee lookup. Defaults to CONFIRMED.
+</ResponseField>
+
+<CommitmentLevelNote />
+
+## Response
+
+<ResponseField name="compute_units" type="uint64">
+  Estimated compute units required to execute this transaction.
+</ResponseField>
+
+<ResponseField name="fee_lamports" type="uint64">
+  Estimated total transaction fee in lamports, including base fee and priority fee.
+</ResponseField>
+
+<ResponseField name="priority_fee" type="uint64">
+  Estimated current network priority fee in lamports based on recent network conditions.
+</ResponseField>
+
+## Code Examples
+
+<CodeGroup>
+
+```go Go
+resp, err := client.EstimateTransaction(ctx, &transaction_v1.EstimateTransactionRequest{
+    Transaction: compiledTxn,
+})
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Printf("Compute units: %d\n", resp.ComputeUnits)
+fmt.Printf("Fee: %d lamports\n", resp.FeeLamports)
+fmt.Printf("Priority fee: %d lamports\n", resp.PriorityFee)
+```
+
+```rust Rust
+let response = client.estimate_transaction(tonic::Request::new(EstimateTransactionRequest {
+    transaction: Some(compiled_txn),
+    ..Default::default()
+})).await?;
+let est = response.into_inner();
+println!("Compute units: {}", est.compute_units);
+println!("Fee: {} lamports", est.fee_lamports);
+```
+
+```typescript TypeScript
+const req = new EstimateTransactionRequest();
+req.setTransaction(compiledTxn);
+client.estimateTransaction(req, (err, response) => {
+  console.log("Compute units:", response.getComputeUnits());
+  console.log("Fee:", response.getFeeLamports(), "lamports");
+  console.log("Priority fee:", response.getPriorityFee(), "lamports");
+});
+```
+
+</CodeGroup>

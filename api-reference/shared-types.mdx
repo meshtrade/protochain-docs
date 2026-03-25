@@ -1,0 +1,74 @@
+---
+title: "Shared Types"
+description: "Common types used across all Protochain gRPC services."
+---
+
+These types appear as fields in request and response messages across multiple Protochain services. Each type is documented once here so method pages can link back rather than repeating definitions.
+
+## CommitmentLevel
+
+`protochain.solana.type.v1.CommitmentLevel`
+
+CommitmentLevel controls which version of the ledger state a query reads from. Solana validators process blocks in three stages — processed, confirmed, finalized — each representing a higher degree of cluster consensus.
+
+When a method accepts an optional `commitment_level` field, omitting it or passing `COMMITMENT_LEVEL_UNSPECIFIED` lets the service use its default (typically `COMMITMENT_LEVEL_CONFIRMED`).
+
+<ResponseField name="COMMITMENT_LEVEL_UNSPECIFIED" type="enum value = 0">
+  Not set. The service uses its default commitment level, which is `COMMITMENT_LEVEL_CONFIRMED` unless otherwise documented. Use this when you have no specific latency or finality requirements.
+</ResponseField>
+
+<ResponseField name="COMMITMENT_LEVEL_PROCESSED" type="enum value = 1">
+  The transaction has been processed by the leader and included in a block, but the block has not yet been confirmed by the cluster. **Use when:** you need the absolute lowest latency and can tolerate the possibility that the block gets dropped. Not suitable for anything involving fund movements.
+</ResponseField>
+
+<ResponseField name="COMMITMENT_LEVEL_CONFIRMED" type="enum value = 2">
+  The block containing the transaction has been confirmed by a supermajority of the cluster. **Use when:** you need a good balance of speed and reliability — the default for most operations. Appropriate for reading account balances, checking transaction status during interactive flows.
+</ResponseField>
+
+<ResponseField name="COMMITMENT_LEVEL_FINALIZED" type="enum value = 3">
+  The block has been rooted (finalized) by the cluster. This block cannot be rolled back. **Use when:** funds must be irreversibly settled before proceeding — for example, confirming a deposit before crediting a user account. This is the slowest option; finality on Solana typically takes 32+ slots (~13 seconds) after confirmation.
+</ResponseField>
+
+---
+
+## TokenProgram
+
+`protochain.solana.type.v1.TokenProgram`
+
+TokenProgram identifies which Solana token program an operation targets. SPL Token (`LEGACY`) and Token-2022 (`2022`) are **incompatible** — a mint created with one program cannot be used with the other. You must use the correct program for all operations involving a given token.
+
+<Warning>
+  `TOKEN_PROGRAM_UNSPECIFIED` is not a valid value. Services return an error if this value is received. Always specify either `TOKEN_PROGRAM_LEGACY` or `TOKEN_PROGRAM_2022`.
+</Warning>
+
+<ResponseField name="TOKEN_PROGRAM_UNSPECIFIED" type="enum value = 0">
+  Invalid. Do not use. Services return an error when this value is received.
+</ResponseField>
+
+<ResponseField name="TOKEN_PROGRAM_LEGACY" type="enum value = 1">
+  The original SPL Token program (`spl-token`, program address `TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA`). The majority of existing Solana tokens use this program. **Use when:** you are working with existing SPL tokens or building for maximum ecosystem compatibility.
+</ResponseField>
+
+<ResponseField name="TOKEN_PROGRAM_2022" type="enum value = 2">
+  The Token Extensions program (`spl-token-2022`, program address `TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb`), also known as Token-2022. Supports extensions: transfer fees, interest-bearing tokens, non-transferable tokens, confidential transfers, and more. **Use when:** you need Token-2022 extensions, or are creating new tokens and want access to the full extension model.
+</ResponseField>
+
+---
+
+## KeyPair
+
+`protochain.solana.type.v1.KeyPair`
+
+A Solana cryptographic key pair used for transaction signing. Returned by `GenerateNewKeyPair` and accepted by `SignTransaction`.
+
+<Warning>
+  The `private_key` field is transmitted in plaintext over gRPC. Use TLS in production. Never log or store `private_key` values.
+</Warning>
+
+<ResponseField name="public_key" type="string" required>
+  Base58-encoded Ed25519 public key. This is the account address on Solana.
+</ResponseField>
+
+<ResponseField name="private_key" type="string" required>
+  Hex-encoded Ed25519 private key (32 bytes = 64 hex characters). Used to sign transactions.
+</ResponseField>

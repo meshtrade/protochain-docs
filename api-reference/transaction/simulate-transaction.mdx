@@ -1,0 +1,84 @@
+---
+title: "SimulateTransaction"
+description: "Dry-run a transaction against current ledger state without committing it."
+---
+
+import CommitmentLevelNote from "/snippets/commitment-level-note.mdx";
+
+Simulates transaction execution against the current ledger state without committing anything on-chain. Returns success/failure, program logs, and any error details.
+
+<Note>
+  Simulation success does not guarantee on-chain success. If ledger state changes between simulation and submission (for example, another transaction modifies an account), the transaction may still fail.
+</Note>
+
+## Request
+
+<ResponseField name="transaction" type="Transaction (object)" required>
+  A compiled transaction (COMPILED state or later).
+</ResponseField>
+
+<ResponseField name="commitment_level" type="CommitmentLevel (enum)">
+  Optional. Ledger state to simulate against. Defaults to CONFIRMED.
+</ResponseField>
+
+<CommitmentLevelNote />
+
+## Response
+
+<ResponseField name="success" type="bool">
+  True if the simulation completed without errors.
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message if the simulation failed. Empty when `success` is true.
+</ResponseField>
+
+<ResponseField name="logs" type="string[]">
+  Program execution log lines from the simulation run. Useful for debugging instruction failures.
+</ResponseField>
+
+## Code Examples
+
+<CodeGroup>
+
+```go Go
+resp, err := client.SimulateTransaction(ctx, &transaction_v1.SimulateTransactionRequest{
+    Transaction: compiledTxn,
+})
+if err != nil {
+    log.Fatal(err)
+}
+if !resp.Success {
+    fmt.Printf("Simulation failed: %s\n", resp.Error)
+    for _, log := range resp.Logs {
+        fmt.Println(log)
+    }
+}
+```
+
+```rust Rust
+let response = client.simulate_transaction(tonic::Request::new(SimulateTransactionRequest {
+    transaction: Some(compiled_txn),
+    ..Default::default()
+})).await?;
+let sim = response.into_inner();
+if !sim.success {
+    println!("Simulation failed: {}", sim.error);
+    for log in &sim.logs {
+        println!("{}", log);
+    }
+}
+```
+
+```typescript TypeScript
+const req = new SimulateTransactionRequest();
+req.setTransaction(compiledTxn);
+client.simulateTransaction(req, (err, response) => {
+  if (!response.getSuccess()) {
+    console.error("Simulation failed:", response.getError());
+    response.getLogsList().forEach(log => console.log(log));
+  }
+});
+```
+
+</CodeGroup>

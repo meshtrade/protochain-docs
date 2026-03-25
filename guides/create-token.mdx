@@ -1,0 +1,358 @@
+---
+title: "Create a Token"
+description: "Create an SPL Token or Token-2022 mint, set up a holding account, and mint tokens end-to-end."
+---
+
+Creating a token on Solana requires three steps: create a mint account, create a holding account for the recipient, and mint tokens to it. This guide covers both SPL Token and Token-2022 paths using the Protochain Token Program Service.
+
+## Choose your token program
+
+Both token programs use the same Protochain API shape — you choose the program once, at mint creation, and it cannot be changed. See [Token Programs](/concepts/token-programs) for the full trade-off comparison.
+
+| | SPL Token | Token-2022 |
+|---|---|---|
+| Metadata | Metaplex PDA (external) | On-chain extension (native) |
+| Extensions | Not supported | Transfer fees, interest-bearing, etc. |
+| Compatibility | Maximum ecosystem support | Newer wallets/DEXs only |
+
+**If you need extensions or native on-chain metadata, use Token-2022. If you need maximum wallet compatibility, use SPL Token.**
+
+## Prerequisites
+
+- A funded payer account. See [Quickstart](/guides/quickstart).
+- A generated mint keypair (the mint's public key). See [Quickstart](/guides/quickstart).
+- A Protochain connection. See [Connecting to Protochain](/guides/connecting).
+
+## Create the mint
+
+Call [CreateToken2022Mint](/api-reference/token-program/mint-creation) or [CreateSPLTokenMint](/api-reference/token-program/mint-creation) depending on your token program choice. Both return a list of `instructions` — include all of them in the transaction in order (the service handles ordering).
+
+### Token-2022 mint
+
+<CodeGroup>
+```go Go
+resp, err := tokenClient.CreateToken2022Mint(ctx, &token_v1.CreateToken2022MintRequest{
+    PayerPubKey:         "PayerPubKey1111111111111111111111111111111",
+    MintPubKey:          "MintPubKey111111111111111111111111111111111",
+    MintAuthorityPubKey: "PayerPubKey1111111111111111111111111111111",
+    Decimals:            6, // like USDC; use 0 for NFTs
+    Extensions:          []*token_v1.Token2022Extension{}, // add Token2022Extension values here for transfer fees, etc.
+})
+if err != nil {
+    log.Fatal(err)
+}
+// Collect all instructions — the response may include multiple
+mintInstructions := resp.Instructions
+```
+```rust Rust
+let resp = token_client.create_token2022_mint(tonic::Request::new(
+    CreateToken2022MintRequest {
+        payer_pub_key:          "PayerPubKey1111111111111111111111111111111".to_string(),
+        mint_pub_key:           "MintPubKey111111111111111111111111111111111".to_string(),
+        mint_authority_pub_key: "PayerPubKey1111111111111111111111111111111".to_string(),
+        decimals: 6, // like USDC; use 0 for NFTs
+        extensions: vec![], // add Token2022Extension values here for transfer fees, etc.
+        ..Default::default()
+    }
+)).await?;
+let mint_instructions = resp.into_inner().instructions;
+```
+```typescript TypeScript
+const mintReq = new CreateToken2022MintRequest();
+mintReq.setPayerPubKey("PayerPubKey1111111111111111111111111111111");
+mintReq.setMintPubKey("MintPubKey111111111111111111111111111111111");
+mintReq.setMintAuthorityPubKey("PayerPubKey1111111111111111111111111111111");
+mintReq.setDecimals(6); // like USDC; use 0 for NFTs
+mintReq.setExtensionsList([]); // add Token2022Extension values here for transfer fees, etc.
+tokenClient.createToken2022Mint(mintReq, (err, response) => {
+  const mintInstructions = response.getInstructionsList();
+});
+```
+</CodeGroup>
+
+### SPL Token mint
+
+<CodeGroup>
+```go Go
+resp, err := tokenClient.CreateSPLTokenMint(ctx, &token_v1.CreateSPLTokenMintRequest{
+    PayerPubKey:         "PayerPubKey1111111111111111111111111111111",
+    MintPubKey:          "MintPubKey111111111111111111111111111111111",
+    MintAuthorityPubKey: "PayerPubKey1111111111111111111111111111111",
+    Decimals:            6, // like USDC; use 0 for NFTs
+    // Metadata: &token_v1.MetaplexTokenMetadata{
+    //     Name:   "My Token",
+    //     Symbol: "MTK",
+    //     Uri:    "https://example.com/metadata.json",
+    // },
+})
+if err != nil {
+    log.Fatal(err)
+}
+// Collect all instructions — the response may include multiple
+mintInstructions := resp.Instructions
+```
+```rust Rust
+let resp = token_client.create_spl_token_mint(tonic::Request::new(
+    CreateSPLTokenMintRequest {
+        payer_pub_key:          "PayerPubKey1111111111111111111111111111111".to_string(),
+        mint_pub_key:           "MintPubKey111111111111111111111111111111111".to_string(),
+        mint_authority_pub_key: "PayerPubKey1111111111111111111111111111111".to_string(),
+        decimals: 6, // like USDC; use 0 for NFTs
+        // metadata: Some(MetaplexTokenMetadata {
+        //     name:   "My Token".to_string(),
+        //     symbol: "MTK".to_string(),
+        //     uri:    "https://example.com/metadata.json".to_string(),
+        // }),
+        ..Default::default()
+    }
+)).await?;
+let mint_instructions = resp.into_inner().instructions;
+```
+```typescript TypeScript
+const mintReq = new CreateSPLTokenMintRequest();
+mintReq.setPayerPubKey("PayerPubKey1111111111111111111111111111111");
+mintReq.setMintPubKey("MintPubKey111111111111111111111111111111111");
+mintReq.setMintAuthorityPubKey("PayerPubKey1111111111111111111111111111111");
+mintReq.setDecimals(6); // like USDC; use 0 for NFTs
+// const meta = new MetaplexTokenMetadata();
+// meta.setName("My Token"); meta.setSymbol("MTK");
+// meta.setUri("https://example.com/metadata.json");
+// mintReq.setMetadata(meta);
+tokenClient.createSplTokenMint(mintReq, (err, response) => {
+  const mintInstructions = response.getInstructionsList();
+});
+```
+</CodeGroup>
+
+## Create a holding account
+
+Before minting, the recipient needs a token holding account (Associated Token Account) for this mint. Call [CreateToken2022HoldingAccount](/api-reference/token-program/holding-accounts) or [CreateSPLTokenHoldingAccount](/api-reference/token-program/holding-accounts) — use the same token program as the mint.
+
+<Note>
+  Pass `owner_pub_key` as the recipient's system wallet address, not a pre-computed ATA address. Protochain derives the ATA automatically.
+</Note>
+
+### Token-2022 holding account
+
+<CodeGroup>
+```go Go
+holdResp, err := tokenClient.CreateToken2022HoldingAccount(ctx, &token_v1.CreateToken2022HoldingAccountRequest{
+    PayerPubKey: "PayerPubKey1111111111111111111111111111111",
+    OwnerPubKey: "RecipientPubKey11111111111111111111111111111",
+    MintPubKey:  "MintPubKey111111111111111111111111111111111",
+    Extensions:  []*token_v1.Token2022HoldingAccountExtension{}, // add holding account extensions here
+})
+if err != nil {
+    log.Fatal(err)
+}
+holdInstructions := holdResp.Instructions
+```
+```rust Rust
+let hold_resp = token_client.create_token2022_holding_account(tonic::Request::new(
+    CreateToken2022HoldingAccountRequest {
+        payer_pub_key: "PayerPubKey1111111111111111111111111111111".to_string(),
+        owner_pub_key: "RecipientPubKey11111111111111111111111111111".to_string(),
+        mint_pub_key:  "MintPubKey111111111111111111111111111111111".to_string(),
+        extensions: vec![], // add holding account extensions here
+        ..Default::default()
+    }
+)).await?;
+let hold_instructions = hold_resp.into_inner().instructions;
+```
+```typescript TypeScript
+const holdReq = new CreateToken2022HoldingAccountRequest();
+holdReq.setPayerPubKey("PayerPubKey1111111111111111111111111111111");
+holdReq.setOwnerPubKey("RecipientPubKey11111111111111111111111111111");
+holdReq.setMintPubKey("MintPubKey111111111111111111111111111111111");
+holdReq.setExtensionsList([]); // add holding account extensions here
+tokenClient.createToken2022HoldingAccount(holdReq, (err, response) => {
+  const holdInstructions = response.getInstructionsList();
+});
+```
+</CodeGroup>
+
+### SPL Token holding account
+
+<CodeGroup>
+```go Go
+holdResp, err := tokenClient.CreateSPLTokenHoldingAccount(ctx, &token_v1.CreateSPLTokenHoldingAccountRequest{
+    PayerPubKey: "PayerPubKey1111111111111111111111111111111",
+    OwnerPubKey: "RecipientPubKey11111111111111111111111111111",
+    MintPubKey:  "MintPubKey111111111111111111111111111111111",
+})
+if err != nil {
+    log.Fatal(err)
+}
+holdInstructions := holdResp.Instructions
+```
+```rust Rust
+let hold_resp = token_client.create_spl_token_holding_account(tonic::Request::new(
+    CreateSPLTokenHoldingAccountRequest {
+        payer_pub_key: "PayerPubKey1111111111111111111111111111111".to_string(),
+        owner_pub_key: "RecipientPubKey11111111111111111111111111111".to_string(),
+        mint_pub_key:  "MintPubKey111111111111111111111111111111111".to_string(),
+    }
+)).await?;
+let hold_instructions = hold_resp.into_inner().instructions;
+```
+```typescript TypeScript
+const holdReq = new CreateSPLTokenHoldingAccountRequest();
+holdReq.setPayerPubKey("PayerPubKey1111111111111111111111111111111");
+holdReq.setOwnerPubKey("RecipientPubKey11111111111111111111111111111");
+holdReq.setMintPubKey("MintPubKey111111111111111111111111111111111");
+tokenClient.createSplTokenHoldingAccount(holdReq, (err, response) => {
+  const holdInstructions = response.getInstructionsList();
+});
+```
+</CodeGroup>
+
+## Compile and submit the mint transaction
+
+Collect all instructions from the mint creation and holding account responses, assemble them into a single transaction, compile with [CompileTransaction](/api-reference/transaction/compile-transaction), sign with both the fee payer key and the mint keypair, then submit.
+
+<Note>
+  The mint account keypair must be included as a signer in SignTransaction — it is not just a public key reference. Both the payer and the mint keypair are required signers.
+</Note>
+
+<CodeGroup>
+```go Go
+// Assemble all instructions into one transaction
+tx := &transaction_v1.Transaction{State: transaction_v1.TransactionState_TRANSACTION_STATE_DRAFT}
+for _, instr := range mintInstructions {
+    tx.Instructions = append(tx.Instructions, instr)
+}
+for _, instr := range holdInstructions {
+    tx.Instructions = append(tx.Instructions, instr)
+}
+
+// Compile
+compileResp, err := txClient.CompileTransaction(ctx, &transaction_v1.CompileTransactionRequest{
+    Transaction: tx,
+    FeePayer:    "PayerPubKey1111111111111111111111111111111",
+})
+if err != nil {
+    log.Fatal(err)
+}
+
+// Sign with both payer and mint keypair
+signResp, err := txClient.SignTransaction(ctx, &transaction_v1.SignTransactionRequest{
+    Transaction: compileResp.Transaction,
+    PrivateKeys: []string{"payerPrivateKey...", "mintPrivateKey..."},
+})
+if err != nil {
+    log.Fatal(err)
+}
+
+// Submit
+submitResp, err := txClient.SubmitTransaction(ctx, &transaction_v1.SubmitTransactionRequest{
+    Transaction: signResp.Transaction,
+})
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Printf("mint tx signature: %s\n", submitResp.Signature)
+```
+```rust Rust
+// Assemble all instructions into one transaction
+let mut instructions = mint_instructions;
+instructions.extend(hold_instructions);
+
+let tx = Transaction {
+    state: TransactionState::Draft as i32,
+    instructions,
+    ..Default::default()
+};
+
+// Compile
+let compiled = tx_client.compile_transaction(tonic::Request::new(CompileTransactionRequest {
+    transaction: Some(tx),
+    fee_payer: "PayerPubKey1111111111111111111111111111111".to_string(),
+    ..Default::default()
+})).await?.into_inner().transaction.unwrap();
+
+// Sign with both payer and mint keypair
+let signed = tx_client.sign_transaction(tonic::Request::new(SignTransactionRequest {
+    transaction: Some(compiled),
+    private_keys: vec!["payerPrivateKey...".to_string(), "mintPrivateKey...".to_string()],
+})).await?.into_inner().transaction.unwrap();
+
+// Submit
+let submit = tx_client.submit_transaction(tonic::Request::new(SubmitTransactionRequest {
+    transaction: Some(signed),
+})).await?.into_inner();
+println!("mint tx signature: {}", submit.signature);
+```
+```typescript TypeScript
+// Assemble all instructions into one transaction
+const tx = new Transaction();
+tx.setState(TransactionState.DRAFT);
+tx.setInstructionsList([...mintInstructions, ...holdInstructions]);
+
+// Compile
+txClient.compileTransaction(
+  new CompileTransactionRequest()
+    .setTransaction(tx)
+    .setFeePayer("PayerPubKey1111111111111111111111111111111"),
+  (err, compileResp) => {
+    // Sign with both payer and mint keypair
+    txClient.signTransaction(
+      new SignTransactionRequest()
+        .setTransaction(compileResp.getTransaction())
+        .setPrivateKeysList(["payerPrivateKey...", "mintPrivateKey..."]),
+      (err, signResp) => {
+        // Submit
+        txClient.submitTransaction(
+          new SubmitTransactionRequest().setTransaction(signResp.getTransaction()),
+          (err, submitResp) => {
+            console.log("mint tx signature:", submitResp.getSignature());
+          }
+        );
+      }
+    );
+  }
+);
+```
+</CodeGroup>
+
+## Mint tokens
+
+With the mint account created, call [Mint](/api-reference/token-program/mint) to issue tokens. Mint is token-program agnostic — Protochain reads the mint on-chain to determine the token program automatically.
+
+<Note>
+  Pass `destination_owner_pub_key` as the recipient's system wallet address, not the ATA address. The ATA is derived automatically.
+</Note>
+
+<CodeGroup>
+```go Go
+mintResp, err := tokenClient.Mint(ctx, &token_v1.MintRequest{
+    MintPubKey:             "MintPubKey111111111111111111111111111111111",
+    DestinationOwnerPubKey: "RecipientPubKey11111111111111111111111111111",
+    Amount:                 "1000.0", // human-readable; 1000 tokens at 6 decimals = 1,000,000,000 base units
+})
+if err != nil {
+    log.Fatal(err)
+}
+```
+```rust Rust
+let mint_resp = token_client.mint(tonic::Request::new(MintRequest {
+    mint_pub_key:              "MintPubKey111111111111111111111111111111111".to_string(),
+    destination_owner_pub_key: "RecipientPubKey11111111111111111111111111111".to_string(),
+    amount:                    "1000.0".to_string(), // human-readable; 1000 tokens at 6 decimals = 1,000,000,000 base units
+})).await?;
+```
+```typescript TypeScript
+const mintTokenReq = new MintRequest();
+mintTokenReq.setMintPubKey("MintPubKey111111111111111111111111111111111");
+mintTokenReq.setDestinationOwnerPubKey("RecipientPubKey11111111111111111111111111111");
+mintTokenReq.setAmount("1000.0"); // human-readable; 1000 tokens at 6 decimals = 1,000,000,000 base units
+tokenClient.mint(mintTokenReq, (err, mintResp) => { /* ... */ });
+```
+</CodeGroup>
+
+Add the returned instruction to a transaction, then compile, sign (mint authority only this time), and submit using the same compile → sign → submit pattern from the previous section.
+
+## Next steps
+
+- Transfer tokens: [Transfer SOL guide](/guides/transfer-sol)
+- Full Token Program reference: [Token Program Service](/api-reference/token-program/overview)
+- Monitor your mint transactions: [Monitor Transactions guide](/guides/monitor-transaction)

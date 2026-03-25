@@ -1,0 +1,60 @@
+---
+title: "GetMinimumBalanceForRentExemption"
+description: "Calculate the minimum lamport balance an account must hold to be exempt from rent collection."
+---
+
+Solana charges rent on accounts proportional to their size unless the account's balance meets the rent-exempt threshold. Call this method before creating an account with System Program Create to determine how many lamports to deposit. The threshold changes when the Solana rent parameters update, so query it at transaction-build time rather than hardcoding it.
+
+<Note>
+  **Common account sizes:** 0 bytes for plain SOL wallets, 82 bytes for SPL Token mints. Pass the returned `balance` as the `lamports` field in [System Program Create](/api-reference/system-program/create).
+</Note>
+
+## Request
+
+<ResponseField name="data_length" type="uint64" required>
+  Size of the account's data in bytes. Use 0 for accounts with no on-chain data (e.g. plain wallets). Use 82 for SPL Token mints.
+</ResponseField>
+
+<ResponseField name="commitment_level" type="CommitmentLevel (enum)">
+  Optional. Controls which ledger state is used for the calculation. Defaults to CONFIRMED. See [CommitmentLevel](/api-reference/shared-types#commitmentlevel).
+</ResponseField>
+
+import CommitmentLevelNote from "/snippets/commitment-level-note.mdx";
+<CommitmentLevelNote />
+
+## Response
+
+<ResponseField name="balance" type="uint64">
+  Minimum lamport balance required for rent exemption at the given data size.
+</ResponseField>
+
+## Code Examples
+
+<CodeGroup>
+```go Go
+resp, err := client.GetMinimumBalanceForRentExemption(ctx, &rpc_client_v1.GetMinimumBalanceForRentExemptionRequest{
+    DataLength: 0, // 0 for plain wallet; use 82 for SPL Token mints
+})
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Printf("Minimum balance for rent exemption: %d lamports\n", resp.Balance)
+```
+```rust Rust
+let response = client.get_minimum_balance_for_rent_exemption(
+    tonic::Request::new(GetMinimumBalanceForRentExemptionRequest {
+        data_length: 0, // 0 for plain wallet; use 82 for SPL Token mints
+        ..Default::default()
+    })
+).await?;
+println!("Minimum balance for rent exemption: {} lamports", response.into_inner().balance);
+```
+```typescript TypeScript
+const req = new GetMinimumBalanceForRentExemptionRequest();
+req.setDataLength(0); // 0 for plain wallet; use 82 for SPL Token mints
+client.getMinimumBalanceForRentExemption(req, (err, response) => {
+  if (err) throw err;
+  console.log("Minimum balance for rent exemption:", response.getBalance(), "lamports");
+});
+```
+</CodeGroup>

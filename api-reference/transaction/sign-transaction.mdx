@@ -1,0 +1,114 @@
+---
+title: "SignTransaction"
+description: "Add cryptographic signatures to a compiled transaction."
+---
+
+Adds one or more Ed25519 signatures to a compiled transaction. Supply either private keys directly or seed+passphrase pairs — never both.
+
+**State transitions:** COMPILED + all required signers → FULLY_SIGNED. COMPILED + subset of signers → PARTIALLY_SIGNED. PARTIALLY_SIGNED + remaining signers → FULLY_SIGNED. See [Transaction Lifecycle](/concepts/transaction-lifecycle) for the full state machine.
+
+<Warning>
+  Private keys are transmitted in plaintext over the gRPC connection. Always use TLS in production.
+  Never call this method over an unencrypted connection with real private keys.
+</Warning>
+
+## Request
+
+<ResponseField name="transaction" type="Transaction (object)" required>
+  Transaction to sign. Must be in COMPILED or PARTIALLY_SIGNED state.
+</ResponseField>
+
+<Note>
+  Supply either `private_keys` or `seeds` — never both. These are mutually exclusive signing methods.
+</Note>
+
+<ResponseField name="private_keys" type="SignWithPrivateKeys (object) — one of">
+  Sign using raw private keys.
+
+  <Expandable title="SignWithPrivateKeys fields">
+    <ResponseField name="private_keys" type="string[]">
+      List of Base58-encoded Ed25519 private keys.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="seeds" type="SignWithSeeds (object) — one of">
+  Sign using seed+passphrase pairs for key derivation.
+
+  <Expandable title="SignWithSeeds fields">
+    <ResponseField name="seeds" type="KeySeed[]">
+      List of seed+passphrase pairs.
+
+      <Expandable title="KeySeed fields">
+        <ResponseField name="seed" type="string">
+          Hex-encoded seed.
+        </ResponseField>
+        <ResponseField name="passphrase" type="string">
+          Optional passphrase for key derivation.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Response
+
+<ResponseField name="transaction" type="Transaction (object)">
+  Transaction with added signatures. State is PARTIALLY_SIGNED or FULLY_SIGNED depending on how many required signers have signed.
+
+  <Expandable title="Transaction fields">
+    <ResponseField name="state" type="TransactionState enum">
+      TRANSACTION_STATE_PARTIALLY_SIGNED (3) or TRANSACTION_STATE_FULLY_SIGNED (4).
+    </ResponseField>
+    <ResponseField name="signatures" type="string[]">
+      All signatures collected so far, as Base58-encoded strings.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Code Examples
+
+<CodeGroup>
+
+```go Go
+// Sign with private keys
+resp, err := client.SignTransaction(ctx, &transaction_v1.SignTransactionRequest{
+    Transaction: compiledTxn,
+    SigningMethod: &transaction_v1.SignTransactionRequest_PrivateKeys{
+        PrivateKeys: &transaction_v1.SignWithPrivateKeys{
+            PrivateKeys: []string{"YourBase58PrivateKey111111111111111111111111111"},
+        },
+    },
+})
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Printf("State: %v\n", resp.Transaction.State)
+```
+
+```rust Rust
+use transaction_v1::sign_transaction_request::SigningMethod;
+
+let response = client.sign_transaction(tonic::Request::new(SignTransactionRequest {
+    transaction: Some(compiled_txn),
+    signing_method: Some(SigningMethod::PrivateKeys(SignWithPrivateKeys {
+        private_keys: vec!["YourBase58PrivateKey111111111111111111111111111".to_string()],
+    })),
+})).await?;
+let signed = response.into_inner().transaction.unwrap();
+println!("State: {:?}", signed.state);
+```
+
+```typescript TypeScript
+const req = new SignTransactionRequest();
+req.setTransaction(compiledTxn);
+const privateKeys = new SignWithPrivateKeys();
+privateKeys.setPrivateKeysList(["YourBase58PrivateKey111111111111111111111111111"]);
+req.setPrivateKeys(privateKeys);
+client.signTransaction(req, (err, response) => {
+  const signed = response.getTransaction();
+  console.log("State:", signed.getState());
+});
+```
+
+</CodeGroup>

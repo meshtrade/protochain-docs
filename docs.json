@@ -1,0 +1,160 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "linden",
+  "name": "Protochain Documentation",
+  "colors": {
+    "primary": "#6367FF",
+    "light": "#8494FF",
+    "dark": "#C9BEFF"
+  },
+  "favicon": "/favicon.svg",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Guides",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "index",
+              "guides/quickstart",
+              "guides/connecting"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/transaction-lifecycle",
+              "concepts/commitment-levels",
+              "concepts/token-programs",
+              "concepts/instructions-and-transactions"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/transfer-sol",
+              "guides/create-token",
+              "guides/monitor-transaction"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api-reference/index",
+              "api-reference/shared-types"
+            ]
+          },
+          {
+            "group": "Account Service",
+            "pages": [
+              "api-reference/account/overview",
+              "api-reference/account/get-account",
+              "api-reference/account/generate-new-key-pair",
+              "api-reference/account/fund-native",
+              "api-reference/account/get-token-account-balance",
+              "api-reference/account/get-associated-token-address"
+            ]
+          },
+          {
+            "group": "Transaction Service",
+            "pages": [
+              "api-reference/transaction/overview",
+              "api-reference/transaction/compile-transaction",
+              "api-reference/transaction/estimate-transaction",
+              "api-reference/transaction/simulate-transaction",
+              "api-reference/transaction/sign-transaction",
+              "api-reference/transaction/check-if-transaction-is-expired",
+              "api-reference/transaction/submit-transaction",
+              "api-reference/transaction/get-transaction",
+              "api-reference/transaction/monitor-transaction"
+            ]
+          },
+          {
+            "group": "System Program Service",
+            "pages": [
+              "api-reference/system-program/overview",
+              "api-reference/system-program/create",
+              "api-reference/system-program/transfer",
+              "api-reference/system-program/allocate",
+              "api-reference/system-program/assign",
+              "api-reference/system-program/nonce-operations"
+            ]
+          },
+          {
+            "group": "Token Program Service",
+            "pages": [
+              "api-reference/token-program/overview",
+              "api-reference/token-program/mint-creation",
+              "api-reference/token-program/holding-accounts",
+              "api-reference/token-program/mint",
+              "api-reference/token-program/parse-mint"
+            ]
+          },
+          {
+            "group": "RPC Client Service",
+            "pages": [
+              "api-reference/rpc-client/overview",
+              "api-reference/rpc-client/get-minimum-balance-for-rent-exemption"
+            ]
+          },
+          {
+            "group": "Errors",
+            "pages": [
+              "api-reference/errors",
+              "api-reference/error-handling-patterns"
+            ]
+          }
+        ]
+      }
+    ],
+    "global": {
+      "anchors": [
+        {
+          "anchor": "Mesh.Trade",
+          "href": "https://mesh.trade",
+          "icon": "globe"
+        }
+      ]
+    }
+  },
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "GitHub",
+        "href": "https://github.com/meshtrade/protochain"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Get Started",
+      "href": "/guides/quickstart"
+    }
+  },
+  "contextual": {
+    "options": [
+     "copy",
+     "view",
+     "chatgpt",
+     "claude",
+     "perplexity",
+     "mcp",
+     "cursor",
+     "vscode"
+   ]
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/meshtrade/protochain"
+    }
+  }
+}

@@ -1,0 +1,148 @@
+---
+title: "SubmitTransaction"
+description: "Broadcast a fully signed transaction to the Solana network."
+---
+
+Broadcasts a fully signed transaction to the Solana network. Returns a submission result and transaction signature immediately — it does not wait for on-chain confirmation.
+
+<Warning>
+  `SUBMISSION_RESULT_SUBMITTED` means the transaction was **accepted for broadcast**, not that it was confirmed or executed on-chain. The transaction may still be dropped, fail during execution, or expire.
+
+  Always use [MonitorTransaction](/api-reference/transaction/monitor-transaction) after submission to track actual on-chain status.
+</Warning>
+
+## Request
+
+<ResponseField name="transaction" type="Transaction (object)" required>
+  Fully signed transaction in `FULLY_SIGNED` state.
+
+  <Expandable title="Transaction fields">
+    <ResponseField name="state" type="TransactionState (enum)">
+      Must be `TRANSACTION_STATE_FULLY_SIGNED` (4). Submit will fail if any required signatures are missing.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="commitment_level" type="CommitmentLevel (enum)">
+  Optional. Controls the confirmation target used when monitoring submission. Defaults to `COMMITMENT_LEVEL_CONFIRMED`.
+
+  <CommitmentLevelNote />
+</ResponseField>
+
+## Response
+
+<ResponseField name="signature" type="Base58-encoded string">
+  Transaction signature. Use this value with [MonitorTransaction](/api-reference/transaction/monitor-transaction) to track on-chain status. Present even for some failure cases.
+</ResponseField>
+
+<ResponseField name="submission_result" type="SubmissionResult (enum)">
+  Whether the transaction was accepted for broadcast. See the SubmissionResult table below.
+</ResponseField>
+
+<ResponseField name="error_message" type="string">
+  Human-readable error description if submission failed. Empty on success.
+</ResponseField>
+
+<ResponseField name="structured_error" type="TransactionError (object)">
+  Structured error for programmatic handling. Present when submission failed or the result is indeterminate. See [Error Reference](/api-reference/errors) for `TransactionErrorCode` values.
+
+  <Expandable title="TransactionError fields">
+    <ResponseField name="code" type="TransactionErrorCode (enum)">
+      Specific error code. See [Error Reference](/api-reference/errors) for the full list.
+    </ResponseField>
+
+    <ResponseField name="message" type="string">
+      Human-readable error message.
+    </ResponseField>
+
+    <ResponseField name="retryable" type="bool">
+      True if the same transaction might succeed if retried without modification.
+    </ResponseField>
+
+    <ResponseField name="certainty" type="TransactionSubmissionCertainty (enum)">
+      How certain we are about whether the transaction was submitted. Critical for `INDETERMINATE` results.
+    </ResponseField>
+
+    <ResponseField name="blockhash" type="string">
+      The transaction's blockhash.
+    </ResponseField>
+
+    <ResponseField name="blockhash_expiry_slot" type="uint64">
+      Slot when the blockhash expires. Use this to determine when it's safe to check on-chain whether the transaction was submitted.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## SubmissionResult Values
+
+| Result | Value | Meaning |
+|--------|-------|---------|
+| `SUBMISSION_RESULT_UNSPECIFIED` | 0 | Not set. |
+| `SUBMISSION_RESULT_SUBMITTED` | 1 | Transaction broadcast to the network. **Not a confirmation.** Use MonitorTransaction to track. |
+| `SUBMISSION_RESULT_FAILED_VALIDATION` | 2 | Pre-submission validation failed. The transaction was **not sent**. |
+| `SUBMISSION_RESULT_FAILED_NETWORK_ERROR` | 3 | Network or RPC error prevented submission. The transaction was likely **not sent**. |
+| `SUBMISSION_RESULT_FAILED_INSUFFICIENT_FUNDS` | 4 | Fee payer has insufficient SOL. The transaction was **not sent**. |
+| `SUBMISSION_RESULT_FAILED_INVALID_SIGNATURE` | 5 | Signature validation failed. The transaction was **not sent**. |
+| `SUBMISSION_RESULT_INDETERMINATE` | 6 | Unknown state. Check `structured_error.certainty` and `structured_error.blockhash_expiry_slot` to determine the recovery strategy. |
+
+<Note>
+  For `SUBMISSION_RESULT_INDETERMINATE`: wait until after `blockhash_expiry_slot`, then query the blockchain. If the transaction is not found on-chain by then, it is safe to recompile and resubmit. See [Error Reference](/api-reference/errors) for `TransactionSubmissionCertainty` handling guidance.
+</Note>
+
+## Code Examples
+
+<CodeGroup>
+
+```go Go
+resp, err := client.SubmitTransaction(ctx, &transaction_v1.SubmitTransactionRequest{
+    Transaction: signedTxn,
+})
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Printf("Signature: %s\n", resp.Signature)
+fmt.Printf("Result: %v\n", resp.SubmissionResult)
+
+if resp.SubmissionResult == transaction_v1.SubmissionResult_SUBMISSION_RESULT_SUBMITTED {
+    // Use MonitorTransaction to track on-chain status
+    fmt.Println("Submitted — use MonitorTransaction to confirm")
+}
+```
+
+```rust Rust
+let response = client.submit_transaction(tonic::Request::new(SubmitTransactionRequest {
+    transaction: Some(signed_txn),
+    ..Default::default()
+})).await?;
+let result = response.into_inner();
+println!("Signature: {}", result.signature);
+
+match result.submission_result() {
+    SubmissionResult::Submitted => println!("Submitted — use MonitorTransaction to confirm"),
+    SubmissionResult::Indeterminate => {
+        // Check structured_error.certainty for resolution
+        if let Some(err) = &result.structured_error {
+            println!("Certainty: {:?}", err.certainty());
+        }
+    }
+    _ => println!("Submission failed: {}", result.error_message),
+}
+```
+
+```typescript TypeScript
+const req = new SubmitTransactionRequest();
+req.setTransaction(signedTxn);
+client.submitTransaction(req, (err, response) => {
+  console.log("Signature:", response.getSignature());
+  const result = response.getSubmissionResult();
+
+  if (result === SubmissionResult.SUBMISSION_RESULT_SUBMITTED) {
+    console.log("Submitted — use MonitorTransaction to confirm");
+  } else if (result === SubmissionResult.SUBMISSION_RESULT_INDETERMINATE) {
+    const structuredError = response.getStructuredError();
+    console.log("Certainty:", structuredError.getCertainty());
+  }
+});
+```
+
+</CodeGroup>

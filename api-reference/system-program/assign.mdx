@@ -1,0 +1,132 @@
+---
+title: "Assign Owner"
+description: "Build a System Program instruction to change an account's owner program, with or without a seed."
+---
+
+<Note>
+  This method returns a SolanaInstruction. Add it to a transaction and use the
+  Transaction Service to execute it on-chain. See [Instructions &
+  Transactions](/concepts/instructions-and-transactions).
+</Note>
+
+## Assign
+
+Changes the owner program of an account. Only the account's current owner program or System Program can assign a new owner. The account must be a signer.
+
+### Request
+
+<ResponseField name="account" type="Base58-encoded public key (string)" required>
+  The account to reassign. Must be a signer.
+</ResponseField>
+
+<ResponseField name="owner_program" type="Base58-encoded public key (string)" required>
+  The new owner program address.
+</ResponseField>
+
+### Response
+
+<ResponseField name="instruction" type="SolanaInstruction (object)">
+  The assign instruction. Add this to a transaction and submit it via the Transaction Service.
+</ResponseField>
+
+### Code Examples
+
+<CodeGroup>
+```go Go
+resp, err := client.Assign(ctx, &system_v1.AssignRequest{
+    Account:      "7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtV",
+    OwnerProgram: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+})
+if err != nil {
+    log.Fatal(err)
+}
+// Add instruction to your transaction
+instruction := resp.Instruction
+```
+```rust Rust
+let response = client.assign(tonic::Request::new(AssignRequest {
+    account: "7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtV".to_string(),
+    owner_program: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA".to_string(),
+})).await?;
+// Add instruction to your transaction
+let instruction = response.into_inner().instruction.unwrap();
+```
+```typescript TypeScript
+const req = new AssignRequest();
+req.setAccount("7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtV");
+req.setOwnerProgram("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+client.assign(req, (err, response) => {
+  // Add instruction to your transaction
+  const instruction = response.getInstruction();
+});
+```
+</CodeGroup>
+
+---
+
+## AssignWithSeed
+
+Reassigns the owner of a seed-derived account. The base key must sign the transaction — not the derived account address.
+
+### Request
+
+<ResponseField name="account" type="Base58-encoded public key (string)" required>
+  The seed-derived account address to reassign.
+</ResponseField>
+
+<ResponseField name="base" type="Base58-encoded public key (string)" required>
+  Base public key used to derive `account`. Must be a signer.
+</ResponseField>
+
+<ResponseField name="seed" type="string" required>
+  Seed string used to derive `account`.
+</ResponseField>
+
+<ResponseField name="owner_program" type="Base58-encoded public key (string)" required>
+  The new owner program address.
+</ResponseField>
+
+### Response
+
+<ResponseField name="instruction" type="SolanaInstruction (object)">
+  The assign_with_seed instruction. Add this to a transaction and submit it via the Transaction Service.
+</ResponseField>
+
+### Code Examples
+
+<CodeGroup>
+```go Go
+resp, err := client.AssignWithSeed(ctx, &system_v1.AssignWithSeedRequest{
+    Account:      "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin",
+    Base:         "7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtV",
+    Seed:         "my-program-data",
+    OwnerProgram: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+})
+if err != nil {
+    log.Fatal(err)
+}
+// Add instruction to your transaction
+instruction := resp.Instruction
+```
+```rust Rust
+let response = client.assign_with_seed(tonic::Request::new(AssignWithSeedRequest {
+    account: "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin".to_string(),
+    base: "7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtV".to_string(),
+    seed: "my-program-data".to_string(),
+    owner_program: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA".to_string(),
+})).await?;
+// Add instruction to your transaction
+let instruction = response.into_inner().instruction.unwrap();
+```
+```typescript TypeScript
+const req = new AssignWithSeedRequest();
+req.setAccount("9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin");
+req.setBase("7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtV");
+req.setSeed("my-program-data");
+req.setOwnerProgram("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+client.assignWithSeed(req, (err, response) => {
+  // Add instruction to your transaction
+  const instruction = response.getInstruction();
+});
+```
+</CodeGroup>

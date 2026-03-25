@@ -1,0 +1,50 @@
+---
+title: "Commitment Levels"
+description: "How Solana's three confirmation stages map to the CommitmentLevel enum — and when to use each."
+---
+
+Solana validators process transactions through three stages of confirmation, each representing a higher degree of cluster consensus. Protochain exposes this as the `CommitmentLevel` enum, which appears on many request messages. Choosing the wrong level is a common source of race conditions — use this page to pick the right one for your use case.
+
+## How Solana confirmation works
+
+When a transaction is submitted to the network, it moves through three distinct confirmation stages before it can be considered permanent:
+
+**Processed** — The transaction has been processed by the current leader and included in a block. At this point it exists on that one node, but the rest of the cluster has not yet voted on the block. The block could still be dropped if the validator fails or the network forks. This is the earliest stage at which you can observe data about the transaction.
+
+**Confirmed** — A supermajority of validators (2/3+) have voted on the block, confirming it. The block is now highly unlikely to be rolled back. The risk of the block being dropped drops sharply at this point. This is the appropriate default for the vast majority of applications.
+
+**Finalized** — The block becomes rooted (finalized) once the cluster has built enough subsequent blocks on top of it. A finalized block cannot be reversed under any circumstances. On Solana mainnet, finalization takes approximately 32+ slots — roughly 13 seconds after confirmation.
+
+The `CommitmentLevel` enum lets you specify which of these stages Protochain should wait for (or read from) when fulfilling a request.
+
+## CommitmentLevel values
+
+| Level | When data is available | Risk of rollback | Typical latency | Use when |
+|-------|----------------------|-----------------|-----------------|----------|
+| `PROCESSED` | As soon as a block is produced | Low, but possible | ~400ms | You need the absolute lowest read latency and can tolerate the small risk of a dropped block (e.g., non-critical UI updates, building read-only tooling) |
+| `CONFIRMED` | After supermajority vote | Very low | ~800ms–1.5s | Most operations — the default. Account balance reads, transaction status checks during interactive flows. |
+| `FINALIZED` | After block is rooted | None — irreversible | ~13s (32+ slots) | Before crediting a user account, confirming a deposit, or any action where a rollback would be harmful. |
+| `UNSPECIFIED` | Service default applies | — | — | When you have no specific requirement. The service uses `CONFIRMED` unless documented otherwise. |
+
+## Which level should I use?
+
+**Default to `CONFIRMED`** — it is the right choice for most API calls. It balances speed with a very high degree of reliability and is what the service uses when you pass `UNSPECIFIED` or omit the field entirely.
+
+**Use `FINALIZED`** for any action where a rollback would cause real harm: confirming an SOL deposit before crediting a user account, verifying a payment before fulfilling an order, or triggering any irreversible off-chain action. The extra latency (roughly 13 seconds on mainnet) is the cost of certainty. If the action would be difficult or impossible to undo, wait for `FINALIZED`.
+
+**Use `PROCESSED`** only for non-critical reads where you prioritize speed over certainty — for example, updating a real-time UI that refreshes every few hundred milliseconds. Never use `PROCESSED` for anything involving fund movements or operations that depend on the transaction being permanent.
+
+**Pass `UNSPECIFIED`** (or omit the field) when you want the service's documented default and have no specific latency or finality requirements. The service will apply `CONFIRMED` unless the method documentation states otherwise.
+
+## Common mistakes
+
+**Using `PROCESSED` for balance checks before acting on the result.** If your application reads a balance at `PROCESSED` and then makes a decision based on it, you may act on a state that gets rolled back. Use `CONFIRMED` for any read that drives a decision.
+
+**Using `CONFIRMED` for deposit verification.** If you credit a user account as soon as the network confirms a deposit, a rare rollback could result in crediting without actual funds arriving. Use `FINALIZED` for any operation that has real financial consequences.
+
+**Treating `UNSPECIFIED` as `PROCESSED`.** The service default is `CONFIRMED`, not `PROCESSED`. If you need low-latency reads, explicitly pass `PROCESSED` — don't rely on an assumption about what `UNSPECIFIED` means.
+
+---
+
+For the full enum reference, see [CommitmentLevel](/api-reference/shared-types#commitmentlevel) in Shared Types.
+

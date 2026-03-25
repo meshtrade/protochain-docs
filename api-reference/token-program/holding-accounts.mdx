@@ -1,0 +1,169 @@
+---
+title: "Create Holding Account"
+description: "Build the complete instruction set to create a Token-2022 or SPL Token Associated Token Account for a wallet."
+---
+
+Both methods create an Associated Token Account (ATA) — the standard account type that holds tokens for a wallet. Choose the method matching your mint's token program.
+
+<Note>
+  These methods return instruction lists. Add them to a transaction and use the Transaction Service to compile, sign, and submit. See [Instructions & Transactions](/concepts/instructions-and-transactions).
+</Note>
+
+---
+
+## CreateToken2022HoldingAccount
+
+Creates a Token-2022 Associated Token Account with optional extensions. Returns the ATA creation instruction plus reallocate and extension-init instructions for each requested extension.
+
+### Request
+
+<ResponseField name="payer_pub_key" type="Base58-encoded public key (string)" required>
+  Pays for ATA creation. Must be a signer.
+</ResponseField>
+
+<ResponseField name="owner_pub_key" type="Base58-encoded public key (string)" required>
+  The wallet that will own this token account.
+</ResponseField>
+
+<ResponseField name="mint_pub_key" type="Base58-encoded public key (string)" required>
+  The Token-2022 mint this account will hold tokens for.
+</ResponseField>
+
+<ResponseField name="extensions" type="Token2022HoldingAccountExtension[] (repeated)">
+  Optional. Extensions to enable on the ATA. Currently supported: `MemoTransfer` (requires a memo on all incoming transfers).
+  <Expandable title="Token2022HoldingAccountExtension fields">
+    <ResponseField name="memo_transfer" type="MemoTransferConfig (object)">
+      When set, requires a memo instruction to accompany all incoming transfers to this account.
+      <Expandable title="MemoTransferConfig fields">
+        <ResponseField name="require_incoming_transfer_memos" type="bool">
+          Set to `true` to require memos on all incoming transfers.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Response
+
+<ResponseField name="instructions" type="SolanaInstruction[] (repeated)" required>
+  Ordered instructions. Includes ATA creation plus reallocate and init for each extension.
+</ResponseField>
+
+<ResponseField name="lamports" type="uint64">
+  Rent-exempt minimum for the final account size including all extensions.
+</ResponseField>
+
+### Code Examples
+
+<CodeGroup>
+```go Go
+resp, err := client.CreateToken2022HoldingAccount(ctx, &token_v1.CreateToken2022HoldingAccountRequest{
+    PayerPubKey: "YourPayerAddress...",
+    OwnerPubKey: "WalletOwnerAddress...",
+    MintPubKey:  "YourToken2022MintAddress...",
+    // Extensions: []*token_v1.Token2022HoldingAccountExtension{...}, // optional
+})
+if err != nil {
+    log.Fatal(err)
+}
+// Add all instructions to your transaction in order
+for _, instr := range resp.Instructions {
+    tx.AddInstruction(instr)
+}
+```
+```rust Rust
+let response = client.create_token2022_holding_account(tonic::Request::new(
+    CreateToken2022HoldingAccountRequest {
+        payer_pub_key: "YourPayerAddress...".to_string(),
+        owner_pub_key: "WalletOwnerAddress...".to_string(),
+        mint_pub_key: "YourToken2022MintAddress...".to_string(),
+        ..Default::default()
+    }
+)).await?;
+// Add all instructions to your transaction in order
+for instr in response.into_inner().instructions {
+    tx.add_instruction(instr);
+}
+```
+```typescript TypeScript
+const req = new CreateToken2022HoldingAccountRequest();
+req.setPayerPubKey("YourPayerAddress...");
+req.setOwnerPubKey("WalletOwnerAddress...");
+req.setMintPubKey("YourToken2022MintAddress...");
+client.createToken2022HoldingAccount(req, (err, response) => {
+  // Add all instructions to your transaction in order
+  for (const instr of response.getInstructionsList()) {
+    tx.addInstruction(instr);
+  }
+});
+```
+</CodeGroup>
+
+---
+
+## CreateSPLTokenHoldingAccount
+
+Creates a legacy SPL Token Associated Token Account. Returns a single ATA creation instruction.
+
+### Request
+
+<ResponseField name="payer_pub_key" type="Base58-encoded public key (string)" required>
+  Pays for ATA creation. Must be a signer.
+</ResponseField>
+
+<ResponseField name="owner_pub_key" type="Base58-encoded public key (string)" required>
+  The wallet that will own this token account.
+</ResponseField>
+
+<ResponseField name="mint_pub_key" type="Base58-encoded public key (string)" required>
+  The SPL Token mint this account will hold tokens for.
+</ResponseField>
+
+### Response
+
+<ResponseField name="instructions" type="SolanaInstruction[] (repeated)" required>
+  A single ATA creation instruction.
+</ResponseField>
+
+<ResponseField name="lamports" type="uint64">
+  Rent-exempt minimum for the ATA.
+</ResponseField>
+
+### Code Examples
+
+<CodeGroup>
+```go Go
+resp, err := client.CreateSPLTokenHoldingAccount(ctx, &token_v1.CreateSPLTokenHoldingAccountRequest{
+    PayerPubKey: "YourPayerAddress...",
+    OwnerPubKey: "WalletOwnerAddress...",
+    MintPubKey:  "YourSPLTokenMintAddress...",
+})
+if err != nil {
+    log.Fatal(err)
+}
+// Add instruction to your transaction
+tx.AddInstruction(resp.Instructions[0])
+```
+```rust Rust
+let response = client.create_spl_token_holding_account(tonic::Request::new(
+    CreateSPLTokenHoldingAccountRequest {
+        payer_pub_key: "YourPayerAddress...".to_string(),
+        owner_pub_key: "WalletOwnerAddress...".to_string(),
+        mint_pub_key: "YourSPLTokenMintAddress...".to_string(),
+    }
+)).await?;
+// Add instruction to your transaction
+let instructions = response.into_inner().instructions;
+tx.add_instruction(instructions.into_iter().next().unwrap());
+```
+```typescript TypeScript
+const req = new CreateSPLTokenHoldingAccountRequest();
+req.setPayerPubKey("YourPayerAddress...");
+req.setOwnerPubKey("WalletOwnerAddress...");
+req.setMintPubKey("YourSPLTokenMintAddress...");
+client.createSplTokenHoldingAccount(req, (err, response) => {
+  // Add instruction to your transaction
+  tx.addInstruction(response.getInstructionsList()[0]);
+});
+```
+</CodeGroup>

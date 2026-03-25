@@ -1,0 +1,55 @@
+---
+title: "Token Programs"
+description: "SPL Token and Token-2022 are two incompatible Solana token programs. This page explains when to use each."
+---
+
+Solana has two token programs: the original SPL Token program (`TOKEN_PROGRAM_LEGACY`) and the newer Token Extensions program (`TOKEN_PROGRAM_2022`). They are not interchangeable — a token mint is permanently tied to one program, and all operations on that token must use the matching program. Mixing them causes failures that can be difficult to diagnose.
+
+<Warning>
+  `TOKEN_PROGRAM_UNSPECIFIED` is not a valid value. If you pass it to any Protochain method, the service returns an error. Always specify either `TOKEN_PROGRAM_LEGACY` or `TOKEN_PROGRAM_2022`.
+</Warning>
+
+## SPL Token (TOKEN_PROGRAM_LEGACY)
+
+The original Solana token standard, deployed in 2020. The vast majority of existing tokens use this program — USDC, wSOL (wrapped SOL), and most DeFi tokens are all SPL Token mints.
+
+**Program address:** `TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA`
+
+SPL Token is stable, widely supported, and has maximum ecosystem compatibility. Every wallet, DEX, and protocol on Solana supports it. However, it does not support extensions — there is no built-in mechanism for transfer fees, interest-bearing behavior, confidential transfers, or other advanced token features.
+
+**Use `TOKEN_PROGRAM_LEGACY` when:**
+- You are working with existing SPL tokens (most tokens on mainnet are LEGACY)
+- You need maximum compatibility with wallets, DEXes, and Solana infrastructure
+- You are creating a new token with no special requirements
+
+## Token-2022 (TOKEN_PROGRAM_2022)
+
+The Token Extensions program (commonly called Token-2022), deployed in 2022 and enabled on Solana mainnet in 2023. It was built to extend the token standard without modifying the original program — so both programs coexist on the network simultaneously.
+
+**Program address:** `TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb`
+
+Token-2022 supports a rich set of extensions that can be configured at mint creation time: transfer fees, interest-bearing tokens, confidential transfers, non-transferable tokens, metadata pointer, and more. However, support in older wallets and protocols may be less universal than LEGACY.
+
+**Use `TOKEN_PROGRAM_2022` when:**
+- You are creating a new token and need one or more extension features (transfer fees, interest-bearing, etc.)
+- You are explicitly building with Token-2022 infrastructure or integrating with an existing Token-2022 mint
+
+## Incompatibility is permanent
+
+Once a mint is created with one program, it cannot be migrated to the other. This is not a configuration choice you can change later — it is determined at mint creation time and baked into the mint's on-chain state.
+
+All token accounts (holding accounts and Associated Token Accounts) for a given mint must also be created with the same program. The `token_program` field must be consistent across every Protochain operation involving a particular mint: creating the mint, creating holding accounts, minting tokens, transferring, and parsing balances.
+
+If you pass the wrong `token_program` for a given mint, Protochain returns an error. The error is not always immediately obvious, so it is worth verifying which program a mint uses before building operations around it.
+
+## Which should I choose?
+
+**Already working with an existing token?** Use whatever program that token was created with. If you are unsure, check the mint's on-chain program address — it will be either `TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA` (LEGACY) or `TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb` (2022).
+
+**Creating a new token that needs transfer fees or other extensions?** Use `TOKEN_PROGRAM_2022`.
+
+**Creating a new token with no special requirements?** Use `TOKEN_PROGRAM_LEGACY` for maximum compatibility with the broader Solana ecosystem.
+
+---
+
+For the full enum reference, see [TokenProgram](/api-reference/shared-types#tokenprogram) in Shared Types. For token creation and minting methods, see the [Token Program Service](/api-reference/token-program/overview).

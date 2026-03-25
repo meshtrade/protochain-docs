@@ -1,0 +1,23 @@
+---
+title: "Token Program Service"
+description: "Build SPL Token and Token-2022 instructions for mint creation, holding account setup, minting tokens, and querying mint state."
+---
+
+The Token Program Service provides instruction builders for the two Solana token programs. Each method returns a `SolanaInstruction` (or a list of instructions for multi-step setup). Before using any method, choose the right token program for your use case.
+
+<Note>
+  Not sure which token program to use? See [Token Programs](/concepts/token-programs) for the trade-offs between SPL Token and Token-2022, and why the choice is permanent.
+</Note>
+
+<Note>
+  Token Program methods that create instructions return `SolanaInstruction` objects. Add them to a transaction and use the Transaction Service to execute on-chain. See [Instructions & Transactions](/concepts/instructions-and-transactions).
+</Note>
+
+## Methods
+
+| Method | Description | Page |
+|--------|-------------|------|
+| CreateToken2022Mint / CreateSPLTokenMint | Create a new token mint. Token-2022 supports extensions; SPL Token supports Metaplex metadata. | [Mint Creation](/api-reference/token-program/mint-creation) |
+| CreateToken2022HoldingAccount / CreateSPLTokenHoldingAccount | Create an Associated Token Account to hold tokens for a wallet. | [Holding Accounts](/api-reference/token-program/holding-accounts) |
+| Mint | Mint new tokens to a destination wallet (token-program agnostic). | [Mint](/api-reference/token-program/mint) |
+| ParseMint | Parse a mint account's state, detecting token program, authority, decimals, and extensions. | [ParseMint](/api-reference/token-program/parse-mint) |

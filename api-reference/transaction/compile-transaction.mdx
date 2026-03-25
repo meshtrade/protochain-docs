@@ -1,0 +1,114 @@
+---
+title: "CompileTransaction"
+description: "Serialize a draft transaction to wire format and fetch a recent blockhash."
+---
+
+Compiles a DRAFT transaction to wire format, transitioning it to COMPILED state. If `recent_blockhash` is not supplied, the service fetches the latest blockhash automatically — this is the standard pattern.
+
+<Note>
+  After compilation, instructions cannot be added or removed. The `instructions` field on the returned transaction is no longer the source of truth — the transaction is now encoded in `data`.
+</Note>
+
+## Request
+
+<ResponseField name="transaction" type="Transaction (object)" required>
+  Draft transaction in DRAFT state containing the instructions to compile.
+
+  <Expandable title="Transaction fields">
+    <ResponseField name="instructions" type="SolanaInstruction[]">
+      Instructions to include in the transaction (only relevant in DRAFT state).
+    </ResponseField>
+    <ResponseField name="config" type="TransactionConfig (object)">
+      Optional compute budget configuration.
+
+      <Expandable title="TransactionConfig fields">
+        <ResponseField name="compute_unit_limit" type="uint32">
+          Max compute units for the transaction.
+        </ResponseField>
+        <ResponseField name="compute_unit_price" type="uint64">
+          Price per compute unit in microlamports.
+        </ResponseField>
+        <ResponseField name="priority_fee" type="uint64">
+          Priority fee in lamports.
+        </ResponseField>
+        <ResponseField name="skip_preflight" type="bool">
+          If true, skip preflight simulation before submission.
+        </ResponseField>
+        <ResponseField name="skip_account_validation" type="bool">
+          If true, skip account validation during submission.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="fee_payer" type="Base58-encoded public key (string)" required>
+  Address that will pay transaction fees.
+</ResponseField>
+
+<ResponseField name="recent_blockhash" type="Base58-encoded string (optional)">
+  Optional. If empty, the service fetches the latest blockhash. Supply only for durable nonce transactions.
+</ResponseField>
+
+## Response
+
+<ResponseField name="transaction" type="Transaction (object)">
+  The compiled transaction in COMPILED state.
+
+  <Expandable title="Transaction fields">
+    <ResponseField name="state" type="TransactionState enum">
+      TRANSACTION_STATE_COMPILED (2) after successful compilation.
+    </ResponseField>
+    <ResponseField name="data" type="string">
+      Compiled transaction bytes. The source of truth once the transaction is in COMPILED or later state.
+    </ResponseField>
+    <ResponseField name="fee_payer" type="Base58-encoded string">
+      The fee payer address.
+    </ResponseField>
+    <ResponseField name="recent_blockhash" type="string">
+      The blockhash used during compilation. Transactions expire ~150 slots after their blockhash.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Code Examples
+
+<CodeGroup>
+
+```go Go
+// Assume txn is a Transaction in DRAFT state with instructions already set
+resp, err := client.CompileTransaction(ctx, &transaction_v1.CompileTransactionRequest{
+    Transaction: txn,
+    FeePayer:    "YourFeePayer111111111111111111111111111111",
+    // recent_blockhash omitted — service fetches latest automatically
+})
+if err != nil {
+    log.Fatal(err)
+}
+compiled := resp.Transaction
+fmt.Printf("State: %v\n", compiled.State)
+```
+
+```rust Rust
+let response = client.compile_transaction(tonic::Request::new(CompileTransactionRequest {
+    transaction: Some(txn), // DRAFT state transaction
+    fee_payer: "YourFeePayer111111111111111111111111111111".to_string(),
+    recent_blockhash: String::new(), // omit — service fetches latest
+    ..Default::default()
+})).await?;
+let compiled = response.into_inner().transaction.unwrap();
+println!("State: {:?}", compiled.state);
+```
+
+```typescript TypeScript
+const req = new CompileTransactionRequest();
+req.setTransaction(txn); // DRAFT state transaction
+req.setFeePayer("YourFeePayer111111111111111111111111111111");
+// recent_blockhash omitted — service fetches latest
+client.compileTransaction(req, (err, response) => {
+  const compiled = response.getTransaction();
+  console.log("State:", compiled.getState());
+});
+```
+
+</CodeGroup>

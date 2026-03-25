@@ -1,0 +1,260 @@
+---
+title: "Quickstart"
+description: "Make your first Protochain API calls: connect to the gRPC server, fetch an account, generate a keypair, and fund it on devnet."
+---
+
+This guide walks through the core Protochain workflow in five minutes. By the end, you'll have a funded devnet keypair and have made successful API calls to the Account Service. All examples use the Account Service — the same connection pattern applies to every other Protochain service.
+
+<Steps>
+
+<Step title="Connect to the Protochain server">
+
+Before making any API calls, create a gRPC channel and instantiate the Account Service client. See [Connecting to Protochain](/guides/connecting) for full TLS/credential options and endpoint configuration.
+
+<CodeGroup>
+
+```go Go
+package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+
+    "google.golang.org/grpc"
+    "google.golang.org/grpc/credentials/insecure"
+    account_v1 "github.com/meshtrade/protochain/lib/go/protochain/solana/account/v1"
+)
+
+func main() {
+    conn, err := grpc.NewClient("YOUR_ENDPOINT:50051",
+        grpc.WithTransportCredentials(insecure.NewCredentials()),
+    )
+    if err != nil {
+        log.Fatalf("connect: %v", err)
+    }
+    defer conn.Close()
+
+    client := account_v1.NewServiceClient(conn)
+    ctx := context.Background()
+    // continue below...
+}
+```
+
+```rust Rust
+use protochain::solana::account::v1::service_client::ServiceClient;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut client = ServiceClient::connect("http://YOUR_ENDPOINT:50051").await?;
+    // continue below...
+    Ok(())
+}
+```
+
+```typescript TypeScript
+import * as grpc from '@grpc/grpc-js';
+import { ServiceClient } from '@protochain/solana-account-v1';
+
+// Note: whether to use callbacks or promises depends on your generated client version.
+// The examples below use the callback-style API common in grpc-js generated stubs.
+const client = new ServiceClient(
+  'YOUR_ENDPOINT:50051',
+  grpc.credentials.createInsecure()
+);
+// continue below...
+```
+
+</CodeGroup>
+
+</Step>
+
+<Step title="Fetch an existing account">
+
+Call `GetAccount` with any known Solana address. This confirms your connection is working and returns the account's SOL balance and owner program.
+
+<CodeGroup>
+
+```go Go
+resp, err := client.GetAccount(ctx, &account_v1.GetAccountRequest{
+    Address: "11111111111111111111111111111111",
+})
+if err != nil {
+    log.Fatalf("GetAccount: %v", err)
+}
+fmt.Printf("address: %s\n", resp.Account.Address)
+fmt.Printf("lamports: %d\n", resp.Account.Lamports)
+fmt.Printf("owner: %s\n", resp.Account.Owner)
+fmt.Printf("executable: %v\n", resp.Account.Executable)
+```
+
+```rust Rust
+use protochain::solana::account::v1::GetAccountRequest;
+
+let request = tonic::Request::new(GetAccountRequest {
+    address: "11111111111111111111111111111111".to_string(),
+    ..Default::default()
+});
+let response = client.get_account(request).await?;
+let account = response.into_inner().account.unwrap();
+println!("address: {}", account.address);
+println!("lamports: {}", account.lamports);
+println!("owner: {}", account.owner);
+println!("executable: {}", account.executable);
+```
+
+```typescript TypeScript
+import { GetAccountRequest } from '@protochain/solana-account-v1';
+
+const request = new GetAccountRequest();
+request.setAddress('11111111111111111111111111111111');
+
+client.getAccount(request, (err, response) => {
+  if (err) throw err;
+  const account = response.getAccount();
+  console.log('address:', account.getAddress());
+  console.log('lamports:', account.getLamports());
+  console.log('owner:', account.getOwner());
+  console.log('executable:', account.getExecutable());
+});
+```
+
+</CodeGroup>
+
+The System Program account (`11111111111111111111111111111111`) is always present on all Solana networks. Fetching it is a reliable connectivity test.
+
+</Step>
+
+<Step title="Generate a new keypair">
+
+Generate a fresh keypair to use as your dev account. The private key is returned in plaintext — store it securely.
+
+<Warning>
+  The private key returned by `GenerateNewKeyPair` is in plaintext. Never commit it to source control or transmit it outside a secure context. For production use, generate keys offline and never pass them through a server.
+</Warning>
+
+<CodeGroup>
+
+```go Go
+kpResp, err := client.GenerateNewKeyPair(ctx, &account_v1.GenerateNewKeyPairRequest{})
+if err != nil {
+    log.Fatalf("GenerateNewKeyPair: %v", err)
+}
+fmt.Printf("public key:  %s\n", kpResp.KeyPair.PublicKey)
+fmt.Printf("private key: %s\n", kpResp.KeyPair.PrivateKey)
+```
+
+```rust Rust
+use protochain::solana::account::v1::GenerateNewKeyPairRequest;
+
+let request = tonic::Request::new(GenerateNewKeyPairRequest {
+    seed: String::new(),
+});
+let response = client.generate_new_key_pair(request).await?;
+let kp = response.into_inner().key_pair.unwrap();
+println!("public key:  {}", kp.public_key);
+println!("private key: {}", kp.private_key);
+```
+
+```typescript TypeScript
+import { GenerateNewKeyPairRequest } from '@protochain/solana-account-v1';
+
+const kpRequest = new GenerateNewKeyPairRequest();
+client.generateNewKeyPair(kpRequest, (err, response) => {
+  if (err) throw err;
+  const kp = response.getKeyPair();
+  console.log('public key: ', kp.getPublicKey());
+  console.log('private key:', kp.getPrivateKey());
+});
+```
+
+</CodeGroup>
+
+</Step>
+
+<Step title="Fund your keypair on devnet">
+
+<Note>
+  `FundNative` uses the Solana devnet faucet. It only works on devnet — it will fail on mainnet or testnet. This is intentional: real SOL cannot be airdropped.
+</Note>
+
+Fund the keypair you just generated with 1 SOL (1,000,000,000 lamports) from the devnet faucet. Then fetch the account to confirm the balance.
+
+<CodeGroup>
+
+```go Go
+// publicKey is the public key from Step 3
+fundResp, err := client.FundNative(ctx, &account_v1.FundNativeRequest{
+    Address: publicKey,
+    Amount:  "1000000000", // 1 SOL in lamports
+})
+if err != nil {
+    log.Fatalf("FundNative: %v", err)
+}
+fmt.Printf("airdrop signature: %s\n", fundResp.Signature)
+
+// Verify the balance
+acctResp, err := client.GetAccount(ctx, &account_v1.GetAccountRequest{
+    Address: publicKey,
+})
+if err != nil {
+    log.Fatalf("GetAccount: %v", err)
+}
+fmt.Printf("balance: %d lamports\n", acctResp.Account.Lamports)
+```
+
+```rust Rust
+use protochain::solana::account::v1::FundNativeRequest;
+
+let fund_request = tonic::Request::new(FundNativeRequest {
+    address: public_key.clone(),  // public_key from Step 3
+    amount: "1000000000".to_string(),  // 1 SOL in lamports
+    ..Default::default()
+});
+let fund_response = client.fund_native(fund_request).await?;
+println!("airdrop signature: {}", fund_response.into_inner().signature);
+
+// Verify the balance
+let acct_request = tonic::Request::new(GetAccountRequest {
+    address: public_key,
+    ..Default::default()
+});
+let acct_response = client.get_account(acct_request).await?;
+let account = acct_response.into_inner().account.unwrap();
+println!("balance: {} lamports", account.lamports);
+```
+
+```typescript TypeScript
+import { FundNativeRequest } from '@protochain/solana-account-v1';
+
+const fundRequest = new FundNativeRequest();
+fundRequest.setAddress(publicKey);   // publicKey from Step 3
+fundRequest.setAmount('1000000000'); // 1 SOL in lamports
+
+client.fundNative(fundRequest, (err, response) => {
+  if (err) throw err;
+  console.log('airdrop signature:', response.getSignature());
+
+  // Verify the balance
+  const acctRequest = new GetAccountRequest();
+  acctRequest.setAddress(publicKey);
+  client.getAccount(acctRequest, (err2, acctResp) => {
+    if (err2) throw err2;
+    console.log('balance:', acctResp.getAccount().getLamports(), 'lamports');
+  });
+});
+```
+
+</CodeGroup>
+
+</Step>
+
+</Steps>
+
+## Next steps
+
+You now have a working Protochain connection and a funded devnet keypair. From here:
+
+- Explore the full [Account Service reference](/api-reference/account/overview) for token balance and ATA methods.
+- Read [Transaction Lifecycle](/concepts/transaction-lifecycle) to understand how to build and submit transactions.
+- Follow the [Transfer SOL guide](/guides/transfer-sol) to build your first transaction end-to-end.

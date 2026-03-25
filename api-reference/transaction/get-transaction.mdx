@@ -1,0 +1,95 @@
+---
+title: "GetTransaction"
+description: "Look up an on-chain transaction by its signature."
+---
+
+Fetches an on-chain transaction by signature and commitment level. Returns the transaction's state, execution slot, program logs, and any error details.
+
+<Note>
+  If the transaction has not yet reached the requested commitment level, the response may return an empty Transaction object.
+  For real-time status tracking, use [MonitorTransaction](/api-reference/transaction/monitor-transaction) instead of polling GetTransaction.
+</Note>
+
+## Request
+
+<ResponseField name="signature" type="Base58-encoded string" required>
+  Transaction signature to look up. Returned by [SubmitTransaction](/api-reference/transaction/submit-transaction).
+</ResponseField>
+
+<ResponseField name="commitment_level" type="CommitmentLevel (enum)">
+  Optional. Ledger state to query. A transaction visible at `FINALIZED` will also be visible at `CONFIRMED` and `PROCESSED`. Defaults to `COMMITMENT_LEVEL_CONFIRMED`.
+
+  <CommitmentLevelNote />
+</ResponseField>
+
+## Response
+
+<ResponseField name="transaction" type="Transaction (object)">
+  The transaction object. May be empty if the transaction has not yet reached the requested commitment level.
+
+  <Expandable title="Transaction fields">
+    <ResponseField name="state" type="TransactionState (enum)">
+      State of the transaction. `FULLY_SIGNED` or later for submitted transactions.
+    </ResponseField>
+
+    <ResponseField name="slot" type="uint64">
+      Blockchain slot where this transaction was processed.
+    </ResponseField>
+
+    <ResponseField name="hash" type="string">
+      Transaction hash.
+    </ResponseField>
+
+    <ResponseField name="meta_error_message" type="string">
+      Human-readable error from transaction meta, if the transaction failed during execution.
+    </ResponseField>
+
+    <ResponseField name="meta_logs" type="string">
+      Program execution logs from the transaction.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Code Examples
+
+<CodeGroup>
+
+```go Go
+resp, err := client.GetTransaction(ctx, &transaction_v1.GetTransactionRequest{
+    Signature: "YourTransactionSignature1111111111111111111",
+})
+if err != nil {
+    log.Fatal(err)
+}
+txn := resp.Transaction
+fmt.Printf("Slot: %d\n", txn.Slot)
+if txn.MetaErrorMessage != "" {
+    fmt.Printf("Execution error: %s\n", txn.MetaErrorMessage)
+}
+```
+
+```rust Rust
+let response = client.get_transaction(tonic::Request::new(GetTransactionRequest {
+    signature: "YourTransactionSignature1111111111111111111".to_string(),
+    ..Default::default()
+})).await?;
+let txn = response.into_inner().transaction.unwrap_or_default();
+println!("Slot: {}", txn.slot);
+if !txn.meta_error_message.is_empty() {
+    println!("Execution error: {}", txn.meta_error_message);
+}
+```
+
+```typescript TypeScript
+const req = new GetTransactionRequest();
+req.setSignature("YourTransactionSignature1111111111111111111");
+client.getTransaction(req, (err, response) => {
+  const txn = response.getTransaction();
+  console.log("Slot:", txn.getSlot());
+  if (txn.getMetaErrorMessage()) {
+    console.log("Execution error:", txn.getMetaErrorMessage());
+  }
+});
+```
+
+</CodeGroup>

@@ -1,0 +1,65 @@
+---
+title: "FundNative"
+description: "Airdrop SOL to an account on Solana devnet."
+---
+
+<Warning>
+  FundNative calls the Solana devnet faucet. This method only works on devnet.
+  Calls will fail on mainnet or testnet.
+</Warning>
+
+Requests an airdrop of SOL from the Solana devnet faucet to the specified address. Returns the airdrop transaction signature.
+
+## Request
+
+<ResponseField name="address" type="Base58-encoded public key (string)" required>
+  The Solana account address to receive the airdrop.
+</ResponseField>
+
+<ResponseField name="amount" type="Lamport amount as a decimal string (string)" required>
+  Amount of SOL to airdrop, denominated in lamports and passed as a decimal string. For example, `"1000000000"` for 1 SOL.
+</ResponseField>
+
+<ResponseField name="commitment_level" type="CommitmentLevel (enum)">
+  Optional. Commitment level for airdrop confirmation. Defaults to CONFIRMED.
+</ResponseField>
+
+import CommitmentLevelNote from "/snippets/commitment-level-note.mdx";
+<CommitmentLevelNote />
+
+## Response
+
+<ResponseField name="signature" type="Base58-encoded string">
+  Transaction signature of the airdrop. Use with GetTransaction or MonitorTransaction to verify completion.
+</ResponseField>
+
+## Code Examples
+
+<CodeGroup>
+```go Go
+resp, err := client.FundNative(ctx, &account_v1.FundNativeRequest{
+    Address: "7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtV",
+    Amount:  "1000000000", // 1 SOL in lamports
+})
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Printf("Airdrop signature: %s\n", resp.Signature)
+```
+```rust Rust
+let response = client.fund_native(tonic::Request::new(FundNativeRequest {
+    address: "7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtV".to_string(),
+    amount: "1000000000".to_string(), // 1 SOL in lamports
+    ..Default::default()
+})).await?;
+println!("Airdrop signature: {}", response.into_inner().signature);
+```
+```typescript TypeScript
+const req = new FundNativeRequest();
+req.setAddress("7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtV");
+req.setAmount("1000000000"); // 1 SOL in lamports
+client.fundNative(req, (err, response) => {
+  console.log("Airdrop signature:", response.getSignature());
+});
+```
+</CodeGroup>

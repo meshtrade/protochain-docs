@@ -1,0 +1,470 @@
+---
+title: "Monitor Transactions"
+description: "Production patterns for consuming the MonitorTransaction streaming RPC: lifecycle states, reconnection, backoff, and terminal state handling."
+---
+
+MonitorTransaction is a server-streaming RPC — the server pushes status updates until the transaction reaches a terminal state. This guide covers production usage: understanding the full lifecycle, handling every terminal outcome, and reconnecting reliably when the stream drops.
+
+For request and response field documentation, see the [MonitorTransaction reference](/api-reference/transaction/monitor-transaction).
+
+## Stream lifecycle
+
+When you call MonitorTransaction, the server begins watching the transaction's on-chain status and emits a new response each time it advances. The stream closes automatically when the transaction reaches a terminal state.
+
+| Status | Terminal? | Meaning |
+|--------|-----------|---------|
+| `TRANSACTION_STATUS_RECEIVED` | No | Received by a validator |
+| `TRANSACTION_STATUS_PROCESSED` | No | Processed (Processed commitment) |
+| `TRANSACTION_STATUS_CONFIRMED` | No | Confirmed (Confirmed commitment) |
+| `TRANSACTION_STATUS_FINALIZED` | **Yes** | Finalized — transaction succeeded |
+| `TRANSACTION_STATUS_FAILED` | **Yes** | On-chain execution failed |
+| `TRANSACTION_STATUS_DROPPED` | **Yes** | Not processed; blockhash may still be valid |
+| `TRANSACTION_STATUS_TIMEOUT` | **Yes** | Monitoring window expired |
+
+<Note>
+  **TIMEOUT** means the monitoring window expired (default: 60 seconds), not that the transaction failed. The transaction may still be processing on-chain.
+
+  **DROPPED** means the transaction was not processed by any validator. If the blockhash has not yet expired, you can resubmit the same transaction.
+</Note>
+
+## Basic stream consumption
+
+The minimal pattern to read a MonitorTransaction stream and handle terminal states:
+
+<CodeGroup>
+
+```go Go
+stream, err := client.MonitorTransaction(ctx, &transaction_v1.MonitorTransactionRequest{
+    Signature: "YourTransactionSignature1111111111111111111",
+})
+if err != nil {
+    log.Fatal(err)
+}
+
+for {
+    resp, err := stream.Recv()
+    if err == io.EOF {
+        break // Stream closed by server
+    }
+    if err != nil {
+        log.Printf("Stream error: %v", err)
+        break
+    }
+
+    fmt.Printf("Status: %v (slot %d)\n", resp.Status, resp.Slot)
+
+    switch resp.Status {
+    case transaction_v1.TransactionStatus_TRANSACTION_STATUS_FINALIZED:
+        fmt.Println("Transaction finalized")
+        return
+    case transaction_v1.TransactionStatus_TRANSACTION_STATUS_FAILED:
+        fmt.Printf("Transaction failed: %s\n", resp.ErrorMessage)
+        return
+    case transaction_v1.TransactionStatus_TRANSACTION_STATUS_DROPPED:
+        fmt.Println("Transaction dropped — consider resubmitting")
+        return
+    case transaction_v1.TransactionStatus_TRANSACTION_STATUS_TIMEOUT:
+        fmt.Println("Monitoring timed out — check GetTransaction for current status")
+        return
+    }
+}
+```
+
+```rust Rust
+let mut stream = client.monitor_transaction(tonic::Request::new(MonitorTransactionRequest {
+    signature: "YourTransactionSignature1111111111111111111".to_string(),
+    ..Default::default()
+})).await?.into_inner();
+
+while let Some(resp) = stream.message().await? {
+    println!("Status: {:?} (slot {})", resp.status(), resp.slot);
+
+    match resp.status() {
+        TransactionStatus::Finalized => {
+            println!("Transaction finalized");
+            break;
+        }
+        TransactionStatus::Failed => {
+            println!("Transaction failed: {}", resp.error_message);
+            break;
+        }
+        TransactionStatus::Dropped => {
+            println!("Transaction dropped — consider resubmitting");
+            break;
+        }
+        TransactionStatus::Timeout => {
+            println!("Monitoring timed out — check GetTransaction for current status");
+            break;
+        }
+        _ => {} // RECEIVED, PROCESSED, CONFIRMED — stream continues
+    }
+}
+```
+
+```typescript TypeScript
+const req = new MonitorTransactionRequest();
+req.setSignature("YourTransactionSignature1111111111111111111");
+
+const stream = client.monitorTransaction(req);
+
+stream.on("data", (response) => {
+  const status = response.getStatus();
+  console.log(`Status: ${status} (slot ${response.getSlot()})`);
+
+  switch (status) {
+    case TransactionStatus.TRANSACTION_STATUS_FINALIZED:
+      console.log("Transaction finalized");
+      break;
+    case TransactionStatus.TRANSACTION_STATUS_FAILED:
+      console.log("Transaction failed:", response.getErrorMessage());
+      break;
+    case TransactionStatus.TRANSACTION_STATUS_DROPPED:
+      console.log("Transaction dropped — consider resubmitting");
+      break;
+    case TransactionStatus.TRANSACTION_STATUS_TIMEOUT:
+      console.log("Monitoring timed out — check GetTransaction");
+      break;
+  }
+});
+
+stream.on("end", () => console.log("Stream closed"));
+stream.on("error", (err) => console.error("Stream error:", err));
+```
+
+</CodeGroup>
+
+## Handling terminal states
+
+Each terminal state requires a different response.
+
+**FINALIZED** — The transaction succeeded and is permanent. No further action needed.
+
+**FAILED** — The transaction executed on-chain but failed (for example, insufficient balance or a program error). Check `error_message` for details. See the [Error Reference](/api-reference/errors) for error codes. Do not resubmit the same transaction — the failure is deterministic.
+
+**DROPPED** — The transaction was not processed. Check whether the blockhash has expired using [CheckIfTransactionIsExpired](/api-reference/transaction/check-if-expired). If the blockhash is still valid, resubmit with [SubmitTransaction](/api-reference/transaction/submit-transaction). If expired, recompile with [CompileTransaction](/api-reference/transaction/compile-transaction) to get a fresh blockhash, then re-sign and resubmit.
+
+**TIMEOUT** — The monitoring window expired (default: 60 seconds). The transaction may still be processing on-chain. Two options:
+1. Call [GetTransaction](/api-reference/transaction/get-transaction) to check current status.
+2. Start a new MonitorTransaction call with the same signature.
+
+The reconnection section below shows how to handle both stream errors and TIMEOUT automatically in production code.
+
+## Production pattern: reconnect with backoff
+
+In production, two things can go wrong beyond terminal states: the gRPC stream itself can drop due to a network error, or TIMEOUT can fire before the transaction finalizes. The pattern below handles both — it retries on stream errors with exponential backoff and restarts monitoring on TIMEOUT.
+
+<CodeGroup>
+
+```go Go
+import (
+    "context"
+    "fmt"
+    "io"
+    "log"
+    "time"
+
+    transaction_v1 "github.com/meshtrade/protochain/lib/go/protochain/solana/transaction/v1"
+)
+
+func monitorWithRetry(
+    ctx context.Context,
+    client transaction_v1.TransactionServiceClient,
+    signature string,
+    maxAttempts int,
+    baseDuration time.Duration,
+) error {
+    maxBackoff := 30 * time.Second
+
+    for attempt := 0; attempt < maxAttempts; attempt++ {
+        stream, err := client.MonitorTransaction(ctx, &transaction_v1.MonitorTransactionRequest{
+            Signature: signature,
+        })
+        if err != nil {
+            log.Printf("Failed to open stream (attempt %d): %v", attempt+1, err)
+            backoff := baseDuration * time.Duration(1<<attempt)
+            if backoff > maxBackoff {
+                backoff = maxBackoff
+            }
+            time.Sleep(backoff)
+            continue
+        }
+
+        streamErr := readStream(stream)
+        switch streamErr {
+        case nil:
+            return nil // FINALIZED — success
+        case errFailed:
+            return streamErr // FAILED — deterministic, do not retry
+        case errDropped:
+            return streamErr // DROPPED — caller decides whether to resubmit
+        case errTimeout:
+            // TIMEOUT — monitoring window expired, retry with backoff
+            log.Printf("Monitoring timed out (attempt %d), retrying...", attempt+1)
+        default:
+            // Network/stream error — retry with backoff
+            log.Printf("Stream error (attempt %d): %v", attempt+1, streamErr)
+        }
+
+        backoff := baseDuration * time.Duration(1<<attempt)
+        if backoff > maxBackoff {
+            backoff = maxBackoff
+        }
+        time.Sleep(backoff)
+    }
+
+    return fmt.Errorf("max retries exceeded after %d attempts", maxAttempts)
+}
+
+var errFailed = fmt.Errorf("transaction failed on-chain")
+var errDropped = fmt.Errorf("transaction dropped")
+var errTimeout = fmt.Errorf("monitoring timeout")
+
+func readStream(stream transaction_v1.TransactionService_MonitorTransactionClient) error {
+    for {
+        resp, err := stream.Recv()
+        if err == io.EOF {
+            return nil
+        }
+        if err != nil {
+            return err
+        }
+        switch resp.Status {
+        case transaction_v1.TransactionStatus_TRANSACTION_STATUS_FINALIZED:
+            log.Printf("Finalized at slot %d", resp.Slot)
+            return nil
+        case transaction_v1.TransactionStatus_TRANSACTION_STATUS_FAILED:
+            return fmt.Errorf("%w: %s", errFailed, resp.ErrorMessage)
+        case transaction_v1.TransactionStatus_TRANSACTION_STATUS_DROPPED:
+            return errDropped
+        case transaction_v1.TransactionStatus_TRANSACTION_STATUS_TIMEOUT:
+            return errTimeout
+        }
+    }
+}
+```
+
+```rust Rust
+use std::time::Duration;
+use tokio::time::sleep;
+
+async fn monitor_with_retry(
+    client: &mut TransactionServiceClient<Channel>,
+    signature: &str,
+    max_attempts: u32,
+    base_secs: u64,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let max_backoff_secs = 30u64;
+
+    for attempt in 0..max_attempts {
+        match client.monitor_transaction(tonic::Request::new(MonitorTransactionRequest {
+            signature: signature.to_string(),
+            ..Default::default()
+        })).await {
+            Err(e) => {
+                eprintln!("Failed to open stream (attempt {}): {}", attempt + 1, e);
+                let backoff = Duration::from_secs(
+                    (base_secs * 2u64.pow(attempt)).min(max_backoff_secs)
+                );
+                sleep(backoff).await;
+                continue;
+            }
+            Ok(response) => {
+                let mut stream = response.into_inner();
+
+                let result = async {
+                    while let Some(resp) = stream.message().await? {
+                        match resp.status() {
+                            TransactionStatus::Finalized => {
+                                println!("Finalized at slot {}", resp.slot);
+                                return Ok(true); // true = terminal success
+                            }
+                            TransactionStatus::Failed => {
+                                return Err(format!("Transaction failed: {}", resp.error_message).into());
+                            }
+                            TransactionStatus::Dropped => {
+                                return Err("Transaction dropped".into());
+                            }
+                            TransactionStatus::Timeout => {
+                                return Ok(false); // false = retry
+                            }
+                            _ => {} // Non-terminal — stream continues
+                        }
+                    }
+                    Ok(false) // Stream ended unexpectedly — retry
+                }.await;
+
+                match result {
+                    Ok(true) => return Ok(()), // FINALIZED
+                    Err(e) if e.to_string().contains("dropped") => return Err(e),
+                    Err(e) if e.to_string().contains("failed") => return Err(e),
+                    Ok(false) | Err(_) => {
+                        eprintln!("Stream ended or timed out (attempt {}), retrying...", attempt + 1);
+                    }
+                }
+            }
+        }
+
+        let backoff = Duration::from_secs(
+            (base_secs * 2u64.pow(attempt)).min(max_backoff_secs)
+        );
+        sleep(backoff).await;
+    }
+
+    Err(format!("Max retries exceeded after {} attempts", max_attempts).into())
+}
+```
+
+```typescript TypeScript
+async function monitorWithRetry(
+  client: TransactionServiceClient,
+  signature: string,
+  maxAttempts: number,
+  baseSecs: number,
+): Promise<void> {
+  const maxSecs = 30;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const backoffMs = Math.min(baseSecs * 2 ** attempt, maxSecs) * 1000;
+
+    try {
+      const result = await new Promise<"finalized" | "timeout" | "stream-error">((resolve, reject) => {
+        const req = new MonitorTransactionRequest();
+        req.setSignature(signature);
+
+        const stream = client.monitorTransaction(req);
+
+        stream.on("data", (response) => {
+          const status = response.getStatus();
+          switch (status) {
+            case TransactionStatus.TRANSACTION_STATUS_FINALIZED:
+              console.log(`Finalized at slot ${response.getSlot()}`);
+              resolve("finalized");
+              break;
+            case TransactionStatus.TRANSACTION_STATUS_FAILED:
+              reject(new Error(`Transaction failed: ${response.getErrorMessage()}`));
+              break;
+            case TransactionStatus.TRANSACTION_STATUS_DROPPED:
+              reject(new Error("Transaction dropped"));
+              break;
+            case TransactionStatus.TRANSACTION_STATUS_TIMEOUT:
+              resolve("timeout");
+              break;
+          }
+        });
+
+        stream.on("error", (err) => {
+          console.error(`Stream error (attempt ${attempt + 1}):`, err);
+          resolve("stream-error");
+        });
+
+        stream.on("end", () => resolve("stream-error"));
+      });
+
+      if (result === "finalized") return;
+
+      // TIMEOUT or stream error — apply backoff and retry
+      console.log(`Retrying after ${backoffMs}ms (attempt ${attempt + 1})...`);
+    } catch (err) {
+      // FAILED or DROPPED — do not retry
+      throw err;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, backoffMs));
+  }
+
+  throw new Error(`Max retries exceeded after ${maxAttempts} attempts`);
+}
+```
+
+</CodeGroup>
+
+## Choosing a commitment level
+
+By default, MonitorTransaction monitors until CONFIRMED. To wait for FINALIZED (a stronger finality guarantee), set `commitment_level` to `COMMITMENT_LEVEL_FINALIZED` in the request. For most applications, CONFIRMED is sufficient — finalization is rarely missed after confirmation.
+
+<CodeGroup>
+
+```go Go
+stream, err := client.MonitorTransaction(ctx, &transaction_v1.MonitorTransactionRequest{
+    Signature:       "YourTransactionSignature1111111111111111111",
+    CommitmentLevel: shared_v1.CommitmentLevel_COMMITMENT_LEVEL_FINALIZED,
+    TimeoutSeconds:  120,
+})
+```
+
+```rust Rust
+let stream = client.monitor_transaction(tonic::Request::new(MonitorTransactionRequest {
+    signature: "YourTransactionSignature1111111111111111111".to_string(),
+    commitment_level: CommitmentLevel::Finalized as i32,
+    timeout_seconds: 120,
+    ..Default::default()
+})).await?.into_inner();
+```
+
+```typescript TypeScript
+const req = new MonitorTransactionRequest();
+req.setSignature("YourTransactionSignature1111111111111111111");
+req.setCommitmentLevel(CommitmentLevel.COMMITMENT_LEVEL_FINALIZED);
+req.setTimeoutSeconds(120);
+```
+
+</CodeGroup>
+
+## Including execution logs
+
+Set `include_logs: true` in the request to receive program execution logs in each status update. Useful for debugging failed transactions. Logs are populated in `MonitorTransactionResponse.logs` on PROCESSED and later statuses.
+
+<CodeGroup>
+
+```go Go
+stream, err := client.MonitorTransaction(ctx, &transaction_v1.MonitorTransactionRequest{
+    Signature:   "YourTransactionSignature1111111111111111111",
+    IncludeLogs: true,
+})
+// ...
+for {
+    resp, err := stream.Recv()
+    // ...
+    if len(resp.Logs) > 0 {
+        fmt.Printf("Logs: %v\n", resp.Logs)
+    }
+}
+```
+
+```rust Rust
+let stream = client.monitor_transaction(tonic::Request::new(MonitorTransactionRequest {
+    signature: "YourTransactionSignature1111111111111111111".to_string(),
+    include_logs: true,
+    ..Default::default()
+})).await?.into_inner();
+// ...
+while let Some(resp) = stream.message().await? {
+    // ...
+    if !resp.logs.is_empty() {
+        println!("Logs: {:?}", resp.logs);
+    }
+}
+```
+
+```typescript TypeScript
+const req = new MonitorTransactionRequest();
+req.setSignature("YourTransactionSignature1111111111111111111");
+req.setIncludeLogs(true);
+
+const stream = client.monitorTransaction(req);
+stream.on("data", (response) => {
+  // ...
+  const logs = response.getLogsList();
+  if (logs.length > 0) {
+    console.log("Logs:", logs);
+  }
+});
+```
+
+</CodeGroup>
+
+## Next steps
+
+- Full request and response field documentation: [MonitorTransaction reference](/api-reference/transaction/monitor-transaction)
+- Handling failed transactions: [Error Reference](/api-reference/errors) and [Error Handling Patterns](/api-reference/error-handling-patterns)
+- Build a complete transaction: [Transfer SOL guide](/guides/transfer-sol)

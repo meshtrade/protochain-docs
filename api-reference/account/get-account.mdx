@@ -1,0 +1,78 @@
+---
+title: "GetAccount"
+description: "Fetch a Solana account's balance, owner, and on-chain data."
+---
+
+Fetches the on-chain state of a Solana account by its Base58-encoded address. Returns the account's SOL balance in lamports, owner program, and raw account data.
+
+## Request
+
+<ResponseField name="address" type="Base58-encoded public key (string)" required>
+  The Solana account address to fetch.
+</ResponseField>
+
+<ResponseField name="commitment_level" type="CommitmentLevel (enum)">
+  Optional. Controls which version of the ledger state to query. Defaults to CONFIRMED. See [CommitmentLevel](/api-reference/shared-types#commitmentlevel).
+</ResponseField>
+
+import CommitmentLevelNote from "/snippets/commitment-level-note.mdx";
+<CommitmentLevelNote />
+
+## Response
+
+<ResponseField name="account" type="Account (object)">
+  The account state.
+  <Expandable title="Account fields">
+    <ResponseField name="address" type="Base58-encoded public key (string)">
+      The account's address.
+    </ResponseField>
+    <ResponseField name="lamports" type="uint64">
+      SOL balance in lamports. 1 SOL = 1,000,000,000 lamports.
+    </ResponseField>
+    <ResponseField name="owner" type="Base58-encoded public key (string)">
+      Address of the program that owns this account.
+    </ResponseField>
+    <ResponseField name="executable" type="bool">
+      True if this account contains a deployed program.
+    </ResponseField>
+    <ResponseField name="data" type="string">
+      Account data encoded as a JSON string.
+    </ResponseField>
+    <ResponseField name="rent_epoch" type="uint64">
+      Epoch at which this account will next owe rent.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Code Examples
+
+<CodeGroup>
+```go Go
+resp, err := client.GetAccount(ctx, &account_v1.GetAccountRequest{
+    Address: "7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtV",
+})
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Printf("Balance: %d lamports\n", resp.Account.Lamports)
+fmt.Printf("Owner: %s\n", resp.Account.Owner)
+```
+```rust Rust
+let response = client.get_account(tonic::Request::new(GetAccountRequest {
+    address: "7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtV".to_string(),
+    ..Default::default()
+})).await?;
+let account = response.into_inner().account.unwrap();
+println!("Balance: {} lamports", account.lamports);
+println!("Owner: {}", account.owner);
+```
+```typescript TypeScript
+const req = new GetAccountRequest();
+req.setAddress("7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtV");
+client.getAccount(req, (err, response) => {
+  const account = response.getAccount();
+  console.log("Balance:", account.getLamports(), "lamports");
+  console.log("Owner:", account.getOwner());
+});
+```
+</CodeGroup>

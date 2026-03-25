@@ -1,0 +1,347 @@
+---
+title: "Error Handling Patterns"
+description: "Code examples for handling the most common Protochain error scenarios — retryable errors, submission certainty, and program execution failures."
+---
+
+Protochain returns structured errors that tell you whether to retry, rebuild, or check on-chain state. The patterns below cover the most common scenarios.
+
+<Note>
+  For the full list of error codes with retryability classifications and remediation actions, see the [Error Reference](/api-reference/errors).
+</Note>
+
+---
+
+## Pattern 1: Checking if an error is retryable
+
+Inspect the `TransactionErrorCode` on a `SubmitTransaction` error to determine whether you can retry the same transaction, need to rebuild it, or need to check on-chain state.
+
+Error codes fall into three categories (see [Error Reference](/api-reference/errors)):
+- **Temporary** (`INSUFFICIENT_FUNDS`, `ACCOUNT_IN_USE`, `WOULD_EXCEED_BLOCK_LIMIT`) — transaction was NOT sent; retry the same transaction
+- **Permanent** (`INVALID_TRANSACTION`, `INVALID_SIGNATURE`, `PROGRAM_ERROR`, etc.) — transaction was NOT sent; do not retry without rebuilding
+- **Indeterminate** (`TIMEOUT`, `NETWORK_ERROR`, `RATE_LIMITED`, etc.) — unknown whether the transaction was sent; check `certainty` (see Pattern 2)
+
+<CodeGroup>
+```go Go
+resp, err := client.SubmitTransaction(ctx, &transaction_v1.SubmitTransactionRequest{
+    CompiledTransaction: compiledTx,
+})
+if err != nil {
+    st, ok := status.FromError(err)
+    if !ok {
+        return fmt.Errorf("non-gRPC error: %w", err)
+    }
+    for _, detail := range st.Details() {
+        if txErr, ok := detail.(*transaction_v1.TransactionError); ok {
+            switch txErr.Code {
+            case transaction_v1.TransactionErrorCode_TRANSACTION_ERROR_CODE_INSUFFICIENT_FUNDS,
+                transaction_v1.TransactionErrorCode_TRANSACTION_ERROR_CODE_ACCOUNT_IN_USE,
+                transaction_v1.TransactionErrorCode_TRANSACTION_ERROR_CODE_WOULD_EXCEED_BLOCK_LIMIT:
+                // Temporary — retry the same transaction after a short wait
+                time.Sleep(500 * time.Millisecond)
+                return retrySubmit(ctx, client, compiledTx)
+            case transaction_v1.TransactionErrorCode_TRANSACTION_ERROR_CODE_TIMEOUT,
+                transaction_v1.TransactionErrorCode_TRANSACTION_ERROR_CODE_NETWORK_ERROR,
+                transaction_v1.TransactionErrorCode_TRANSACTION_ERROR_CODE_RATE_LIMITED:
+                // Indeterminate — check certainty before deciding
+                return handleIndeterminate(ctx, client, txErr)
+            default:
+                // Permanent — do not retry without rebuilding
+                return fmt.Errorf("permanent error: %s", txErr.Code)
+            }
+        }
+    }
+}
+```
+```rust Rust
+match client.submit_transaction(tonic::Request::new(SubmitTransactionRequest {
+    compiled_transaction: Some(compiled_tx),
+    ..Default::default()
+})).await {
+    Ok(response) => { /* success */ }
+    Err(status) => {
+        for detail in status.details().iter() {
+            if let Ok(tx_err) = TransactionError::decode(detail.as_ref()) {
+                match tx_err.code() {
+                    TransactionErrorCode::InsufficientFunds
+                    | TransactionErrorCode::AccountInUse
+                    | TransactionErrorCode::WouldExceedBlockLimit => {
+                        // Temporary — retry the same transaction after a short wait
+                        tokio::time::sleep(Duration::from_millis(500)).await;
+                        return retry_submit(ctx, client, compiled_tx).await;
+                    }
+                    TransactionErrorCode::Timeout
+                    | TransactionErrorCode::NetworkError
+                    | TransactionErrorCode::RateLimited => {
+                        // Indeterminate — check certainty before deciding
+                        return handle_indeterminate(ctx, client, &tx_err).await;
+                    }
+                    _ => {
+                        // Permanent — do not retry without rebuilding
+                        return Err(anyhow!("permanent error: {:?}", tx_err.code()));
+                    }
+                }
+            }
+        }
+    }
+}
+```
+```typescript TypeScript
+client.submitTransaction(req, (err, response) => {
+  if (err) {
+    const txError = extractTransactionError(err); // extract from gRPC status details
+    if (!txError) throw err;
+
+    const temporaryCodes = [
+      TransactionErrorCode.TRANSACTION_ERROR_CODE_INSUFFICIENT_FUNDS,
+      TransactionErrorCode.TRANSACTION_ERROR_CODE_ACCOUNT_IN_USE,
+      TransactionErrorCode.TRANSACTION_ERROR_CODE_WOULD_EXCEED_BLOCK_LIMIT,
+    ];
+    const indeterminateCodes = [
+      TransactionErrorCode.TRANSACTION_ERROR_CODE_TIMEOUT,
+      TransactionErrorCode.TRANSACTION_ERROR_CODE_NETWORK_ERROR,
+      TransactionErrorCode.TRANSACTION_ERROR_CODE_RATE_LIMITED,
+    ];
+
+    if (temporaryCodes.includes(txError.getCode())) {
+      // Temporary — retry the same transaction after a short wait
+      setTimeout(() => retrySubmit(compiledTx), 500);
+    } else if (indeterminateCodes.includes(txError.getCode())) {
+      // Indeterminate — check certainty before deciding
+      handleIndeterminate(txError);
+    } else {
+      // Permanent — do not retry without rebuilding
+      throw new Error(`Permanent error: ${txError.getCode()}`);
+    }
+  }
+});
+```
+</CodeGroup>
+
+---
+
+## Pattern 2: Handling indeterminate submission (TransactionSubmissionCertainty)
+
+Indeterminate errors are the trickiest case — you don't know if the transaction was broadcast. The `certainty` field on the `TransactionError` tells you how to proceed.
+
+- `CERTAINTY_SUBMITTED` — the transaction was sent; use [GetTransaction](/api-reference/transaction/get-transaction) or [MonitorTransaction](/api-reference/transaction/monitor-transaction) to poll for the result
+- `CERTAINTY_NOT_SUBMITTED` — the transaction was not sent; safe to retry or resubmit
+- `CERTAINTY_UNKNOWN_RESOLVABLE` — uncertain but resolvable; wait until after `blockhash_expiry_slot`, then query on-chain — if not found, safe to recompile and resubmit
+- `CERTAINTY_UNKNOWN` — uncertain and not easily resolvable; treat conservatively, wait for blockhash expiry, query on-chain before deciding to resubmit
+
+<CodeGroup>
+```go Go
+func handleIndeterminate(ctx context.Context, client transaction_v1.TransactionServiceClient, txErr *transaction_v1.TransactionError) error {
+    switch txErr.Certainty {
+    case transaction_v1.TransactionSubmissionCertainty_TRANSACTION_SUBMISSION_CERTAINTY_SUBMITTED:
+        // Transaction was sent — monitor for on-chain result
+        log.Println("Transaction sent. Monitoring for confirmation...")
+        return monitorTransaction(ctx, client, txErr.Signature)
+
+    case transaction_v1.TransactionSubmissionCertainty_TRANSACTION_SUBMISSION_CERTAINTY_NOT_SUBMITTED:
+        // Transaction was NOT sent — safe to retry immediately
+        log.Println("Transaction not sent. Retrying...")
+        return retrySubmit(ctx, client, compiledTx)
+
+    case transaction_v1.TransactionSubmissionCertainty_TRANSACTION_SUBMISSION_CERTAINTY_UNKNOWN_RESOLVABLE:
+        // Wait for blockhash expiry, then check on-chain
+        log.Printf("Uncertain. Waiting for blockhash expiry at slot %d...", txErr.BlockhashExpirySlot)
+        waitForSlot(ctx, txErr.BlockhashExpirySlot)
+        found, err := checkOnChain(ctx, client, txErr.Signature)
+        if err != nil {
+            return err
+        }
+        if !found {
+            // Safe to recompile and resubmit
+            return recompileAndSubmit(ctx, client, instructions)
+        }
+        return nil
+
+    default: // CERTAINTY_UNKNOWN or CERTAINTY_UNSPECIFIED
+        // Treat conservatively — wait, query, then decide
+        log.Println("Certainty unknown. Waiting for blockhash expiry before checking on-chain.")
+        waitForSlot(ctx, txErr.BlockhashExpirySlot)
+        found, _ := checkOnChain(ctx, client, txErr.Signature)
+        if !found {
+            return recompileAndSubmit(ctx, client, instructions)
+        }
+        return nil
+    }
+}
+```
+```rust Rust
+async fn handle_indeterminate(
+    ctx: &Context,
+    client: &mut TransactionServiceClient<Channel>,
+    tx_err: &TransactionError,
+) -> Result<()> {
+    match tx_err.certainty() {
+        TransactionSubmissionCertainty::Submitted => {
+            // Transaction was sent — monitor for on-chain result
+            println!("Transaction sent. Monitoring for confirmation...");
+            monitor_transaction(ctx, client, &tx_err.signature).await
+        }
+        TransactionSubmissionCertainty::NotSubmitted => {
+            // Transaction was NOT sent — safe to retry immediately
+            println!("Transaction not sent. Retrying...");
+            retry_submit(ctx, client, &compiled_tx).await
+        }
+        TransactionSubmissionCertainty::UnknownResolvable => {
+            // Wait for blockhash expiry, then check on-chain
+            println!("Uncertain. Waiting for blockhash expiry at slot {}...", tx_err.blockhash_expiry_slot);
+            wait_for_slot(ctx, tx_err.blockhash_expiry_slot).await;
+            let found = check_on_chain(ctx, client, &tx_err.signature).await?;
+            if !found {
+                recompile_and_submit(ctx, client, &instructions).await
+            } else {
+                Ok(())
+            }
+        }
+        _ => {
+            // UNKNOWN or UNSPECIFIED — treat conservatively
+            println!("Certainty unknown. Waiting for blockhash expiry before checking on-chain.");
+            wait_for_slot(ctx, tx_err.blockhash_expiry_slot).await;
+            let found = check_on_chain(ctx, client, &tx_err.signature).await.unwrap_or(false);
+            if !found {
+                recompile_and_submit(ctx, client, &instructions).await
+            } else {
+                Ok(())
+            }
+        }
+    }
+}
+```
+```typescript TypeScript
+function handleIndeterminate(txError: TransactionError): void {
+  const certainty = txError.getCertainty();
+
+  if (certainty === TransactionSubmissionCertainty.TRANSACTION_SUBMISSION_CERTAINTY_SUBMITTED) {
+    // Transaction was sent — monitor for on-chain result
+    console.log("Transaction sent. Monitoring for confirmation...");
+    monitorTransaction(txError.getSignature());
+
+  } else if (certainty === TransactionSubmissionCertainty.TRANSACTION_SUBMISSION_CERTAINTY_NOT_SUBMITTED) {
+    // Transaction was NOT sent — safe to retry immediately
+    console.log("Transaction not sent. Retrying...");
+    retrySubmit(compiledTx);
+
+  } else if (certainty === TransactionSubmissionCertainty.TRANSACTION_SUBMISSION_CERTAINTY_UNKNOWN_RESOLVABLE) {
+    // Wait for blockhash expiry, then check on-chain
+    console.log(`Uncertain. Waiting for blockhash expiry at slot ${txError.getBlockhashExpirySlot()}...`);
+    waitForSlot(txError.getBlockhashExpirySlot()).then(() => {
+      checkOnChain(txError.getSignature()).then(found => {
+        if (!found) recompileAndSubmit(instructions);
+      });
+    });
+
+  } else {
+    // UNKNOWN or UNSPECIFIED — treat conservatively
+    console.log("Certainty unknown. Waiting for blockhash expiry before checking on-chain.");
+    waitForSlot(txError.getBlockhashExpirySlot()).then(() => {
+      checkOnChain(txError.getSignature()).then(found => {
+        if (!found) recompileAndSubmit(instructions);
+      });
+    });
+  }
+}
+```
+</CodeGroup>
+
+---
+
+## Pattern 3: Handling program execution failures
+
+`TRANSACTION_ERROR_CODE_PROGRAM_ERROR` means the on-chain program rejected the instruction. The error code itself is generic — call [GetTransaction](/api-reference/transaction/get-transaction) with the transaction signature to retrieve the detailed `meta_error_message` from the on-chain logs.
+
+<CodeGroup>
+```go Go
+if txErr.Code == transaction_v1.TransactionErrorCode_TRANSACTION_ERROR_CODE_PROGRAM_ERROR {
+    // Fetch detailed error message from on-chain logs
+    txResp, err := client.GetTransaction(ctx, &transaction_v1.GetTransactionRequest{
+        Signature: txErr.Signature,
+    })
+    if err != nil {
+        return fmt.Errorf("failed to fetch transaction details: %w", err)
+    }
+    log.Printf("Program error: %s", txResp.Transaction.MetaErrorMessage)
+    return fmt.Errorf("program rejected instruction: %s", txResp.Transaction.MetaErrorMessage)
+}
+```
+```rust Rust
+if tx_err.code() == TransactionErrorCode::ProgramError {
+    // Fetch detailed error message from on-chain logs
+    let tx_response = client.get_transaction(tonic::Request::new(GetTransactionRequest {
+        signature: tx_err.signature.clone(),
+        ..Default::default()
+    })).await?;
+    let meta_error = tx_response.into_inner()
+        .transaction
+        .map(|t| t.meta_error_message)
+        .unwrap_or_default();
+    eprintln!("Program error: {}", meta_error);
+    return Err(anyhow!("Program rejected instruction: {}", meta_error));
+}
+```
+```typescript TypeScript
+if (txError.getCode() === TransactionErrorCode.TRANSACTION_ERROR_CODE_PROGRAM_ERROR) {
+  // Fetch detailed error message from on-chain logs
+  const getReq = new GetTransactionRequest();
+  getReq.setSignature(txError.getSignature());
+
+  client.getTransaction(getReq, (err, txResponse) => {
+    if (err) throw err;
+    const metaErrorMessage = txResponse.getTransaction()?.getMetaErrorMessage();
+    console.error("Program error:", metaErrorMessage);
+    throw new Error(`Program rejected instruction: ${metaErrorMessage}`);
+  });
+}
+```
+</CodeGroup>
+
+---
+
+## Pattern 4: Handling expired blockhash
+
+Compiled transactions expire after approximately 150 slots (~60 seconds). `TRANSACTION_ERROR_CODE_BLOCKHASH_EXPIRED` means the transaction is stale and cannot be submitted. You must recompile — not just re-sign — to get a fresh blockhash.
+
+<CodeGroup>
+```go Go
+if txErr.Code == transaction_v1.TransactionErrorCode_TRANSACTION_ERROR_CODE_BLOCKHASH_EXPIRED {
+    // Recompile to get a fresh blockhash — do not just retry with the same compiled transaction
+    compileResp, err := txClient.CompileTransaction(ctx, &transaction_v1.CompileTransactionRequest{
+        Instructions: instructions,
+        FeePayer:     feePayer,
+    })
+    if err != nil {
+        return fmt.Errorf("recompile failed: %w", err)
+    }
+    // Re-sign and re-submit with the freshly compiled transaction
+    return signAndSubmit(ctx, txClient, compileResp.CompiledTransaction)
+}
+```
+```rust Rust
+if tx_err.code() == TransactionErrorCode::BlockhashExpired {
+    // Recompile to get a fresh blockhash — do not just retry with the same compiled transaction
+    let compile_response = tx_client.compile_transaction(tonic::Request::new(CompileTransactionRequest {
+        instructions: instructions.clone(),
+        fee_payer: fee_payer.clone(),
+        ..Default::default()
+    })).await?;
+    // Re-sign and re-submit with the freshly compiled transaction
+    sign_and_submit(ctx, tx_client, compile_response.into_inner().compiled_transaction).await
+}
+```
+```typescript TypeScript
+if (txError.getCode() === TransactionErrorCode.TRANSACTION_ERROR_CODE_BLOCKHASH_EXPIRED) {
+  // Recompile to get a fresh blockhash — do not just retry with the same compiled transaction
+  const compileReq = new CompileTransactionRequest();
+  compileReq.setInstructionsList(instructions);
+  compileReq.setFeePayer(feePayer);
+
+  txClient.compileTransaction(compileReq, (err, compileResponse) => {
+    if (err) throw err;
+    // Re-sign and re-submit with the freshly compiled transaction
+    signAndSubmit(compileResponse.getCompiledTransaction());
+  });
+}
+```
+</CodeGroup>

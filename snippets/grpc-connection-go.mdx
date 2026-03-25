@@ -1,0 +1,17 @@
+```go Go
+import (
+    "google.golang.org/grpc"
+    "google.golang.org/grpc/credentials/insecure"
+    account_v1 "github.com/meshtrade/protochain/lib/go/protochain/solana/account/v1"
+)
+
+conn, err := grpc.NewClient("localhost:50051", grpc.WithTransportCredentials(insecure.NewCredentials()))
+if err != nil {
+    log.Fatal(err)
+}
+defer conn.Close()
+
+client := account_v1.NewServiceClient(conn)
+```
+
+<Note>See [Connecting to Protochain](/guides/connecting) for TLS setup, authentication, and production configuration.</Note>

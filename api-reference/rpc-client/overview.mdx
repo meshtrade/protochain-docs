@@ -1,0 +1,12 @@
+---
+title: "RPC Client Service"
+description: "Query low-level Solana RPC data — currently provides rent exemption calculation."
+---
+
+The RPC Client Service proxies Solana RPC queries that don't map cleanly to any other Protochain service. Currently provides one method for rent exemption calculation, which is a prerequisite for creating accounts with the System Program.
+
+## Methods
+
+| Method | Description | Page |
+|--------|-------------|------|
+| [GetMinimumBalanceForRentExemption](/api-reference/rpc-client/get-minimum-balance-for-rent-exemption) | Calculate the minimum lamport balance for a rent-exempt account of given size | [View](/api-reference/rpc-client/get-minimum-balance-for-rent-exemption) |

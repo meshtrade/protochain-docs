@@ -1,0 +1,75 @@
+---
+title: "Mint"
+description: "Build a MintToChecked instruction to mint tokens to a destination wallet. Token-program agnostic."
+---
+
+The Mint method reads the mint account on-chain to determine the token program, mint authority, and decimal precision automatically — you only supply the mint address, destination wallet owner, and amount as a human-readable decimal string.
+
+<Note>
+  This method returns a `SolanaInstruction`. Add it to a transaction and use the Transaction Service to compile, sign, and submit. See [Instructions & Transactions](/concepts/instructions-and-transactions).
+</Note>
+
+<Warning>
+  Pass the destination **owner's system account address** in `destination_owner_pub_key` — not the Associated Token Account (ATA) address. The ATA is derived automatically from the owner and mint addresses.
+</Warning>
+
+## Request
+
+<ResponseField name="mint_pub_key" type="Base58-encoded public key (string)" required>
+  The token mint to mint from.
+</ResponseField>
+
+<ResponseField name="destination_owner_pub_key" type="Base58-encoded public key (string)" required>
+  The system account (wallet) that owns the destination token account. The ATA is derived from this address and the mint automatically. Do **not** pass the ATA address here.
+</ResponseField>
+
+<ResponseField name="amount" type="string (decimal)" required>
+  Human-readable token amount. Express in whole-token units using the mint's decimal precision.
+
+  Examples:
+  - `"1.5"` — 1.5 tokens on a 6-decimal mint
+  - `"1000"` — 1000 whole tokens
+  - `"0.000001"` — 1 base unit on a 6-decimal mint
+</ResponseField>
+
+## Response
+
+<ResponseField name="instruction" type="SolanaInstruction (object)" required>
+  The `MintToChecked` instruction. Add this to your transaction.
+</ResponseField>
+
+## Code Examples
+
+<CodeGroup>
+```go Go
+resp, err := client.Mint(ctx, &token_v1.MintRequest{
+    MintPubKey:              "YourMintAddress...",
+    DestinationOwnerPubKey:  "RecipientWalletAddress...", // owner address, not ATA
+    Amount:                  "10.0",
+})
+if err != nil {
+    log.Fatal(err)
+}
+// Add instruction to your transaction
+tx.AddInstruction(resp.Instruction)
+```
+```rust Rust
+let response = client.mint(tonic::Request::new(MintRequest {
+    mint_pub_key: "YourMintAddress...".to_string(),
+    destination_owner_pub_key: "RecipientWalletAddress...".to_string(), // owner, not ATA
+    amount: "10.0".to_string(),
+})).await?;
+// Add instruction to your transaction
+tx.add_instruction(response.into_inner().instruction.unwrap());
+```
+```typescript TypeScript
+const req = new MintRequest();
+req.setMintPubKey("YourMintAddress...");
+req.setDestinationOwnerPubKey("RecipientWalletAddress..."); // owner, not ATA
+req.setAmount("10.0");
+client.mint(req, (err, response) => {
+  // Add instruction to your transaction
+  tx.addInstruction(response.getInstruction());
+});
+```
+</CodeGroup>

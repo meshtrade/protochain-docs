@@ -1,0 +1,16 @@
+---
+title: "Account Service"
+description: "Read and manage Solana accounts: balances, keypairs, and token accounts."
+---
+
+The Account Service provides read and key management operations for Solana accounts. No state mutation occurs — FundNative is the exception and is devnet-only. All address fields are Base58-encoded strings.
+
+## Methods
+
+| Method | Description |
+|--------|-------------|
+| [GetAccount](/api-reference/account/get-account) | Fetch an account's SOL balance, owner, and on-chain data. |
+| [GenerateNewKeyPair](/api-reference/account/generate-new-key-pair) | Generate a new Ed25519 keypair, optionally deterministic from a seed. |
+| [FundNative](/api-reference/account/fund-native) | Airdrop SOL to an account on devnet. |
+| [GetTokenAccountBalance](/api-reference/account/get-token-account-balance) | Get the raw token balance of a token holding account. |
+| [GetAssociatedTokenAddress](/api-reference/account/get-associated-token-address) | Derive the associated token account address (PDA) for a wallet and mint pair. |

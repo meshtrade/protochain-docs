@@ -1,0 +1,71 @@
+---
+title: "GetAssociatedTokenAddress"
+description: "Derive the associated token account address (PDA) for a wallet and token mint."
+---
+
+Derives the associated token account (ATA) address for a given wallet and mint pair. The address is a Program Derived Address (PDA) — it is deterministic and does not require the account to exist on-chain.
+
+<Note>
+  This method returns the derived address regardless of whether the token account exists on-chain.
+  Call [GetAccount](/api-reference/account/get-account) on the returned address to verify existence.
+</Note>
+
+## Request
+
+<ResponseField name="owner_address" type="Base58-encoded public key (string)" required>
+  Wallet address that owns (or will own) the associated token account.
+</ResponseField>
+
+<ResponseField name="mint_address" type="Base58-encoded public key (string)" required>
+  Address of the token mint.
+</ResponseField>
+
+import TokenProgramField from "/snippets/token-program-field.mdx";
+<TokenProgramField />
+
+<Warning>
+  SPL Token and Token-2022 ATAs are at **different PDA addresses** for the same wallet and mint pair.
+  Using the wrong token program returns the wrong address. See [Token Programs](/concepts/token-programs) for how to determine which program a mint uses.
+</Warning>
+
+## Response
+
+<ResponseField name="address" type="Base58-encoded public key (string)">
+  The derived associated token account address. This account may or may not exist on-chain.
+</ResponseField>
+
+## Code Examples
+
+<CodeGroup>
+```go Go
+resp, err := client.GetAssociatedTokenAddress(ctx, &account_v1.GetAssociatedTokenAddressRequest{
+    OwnerAddress: "YourWalletAddress11111111111111111111111111",
+    MintAddress:  "YourMintAddress111111111111111111111111111",
+    TokenProgram: common_v1.TokenProgram_TOKEN_PROGRAM_2022,
+})
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Printf("Token account address: %s\n", resp.Address)
+```
+```rust Rust
+let response = client.get_associated_token_address(tonic::Request::new(
+    GetAssociatedTokenAddressRequest {
+        owner_address: "YourWalletAddress11111111111111111111111111".to_string(),
+        mint_address: "YourMintAddress111111111111111111111111111".to_string(),
+        token_program: TokenProgram::TokenProgram2022 as i32,
+        ..Default::default()
+    }
+)).await?;
+println!("Token account address: {}", response.into_inner().address);
+```
+```typescript TypeScript
+const req = new GetAssociatedTokenAddressRequest();
+req.setOwnerAddress("YourWalletAddress11111111111111111111111111");
+req.setMintAddress("YourMintAddress111111111111111111111111111");
+req.setTokenProgram(TokenProgram.TOKEN_PROGRAM_2022);
+client.getAssociatedTokenAddress(req, (err, response) => {
+  console.log("Token account address:", response.getAddress());
+});
+```
+</CodeGroup>

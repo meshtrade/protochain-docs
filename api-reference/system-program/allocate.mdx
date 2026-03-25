@@ -1,0 +1,132 @@
+---
+title: "Allocate Space"
+description: "Build a System Program instruction to allocate data space for an account, with or without a seed."
+---
+
+<Note>
+  This method returns a SolanaInstruction. Add it to a transaction and use the
+  Transaction Service to execute it on-chain. See [Instructions &
+  Transactions](/concepts/instructions-and-transactions).
+</Note>
+
+## Allocate
+
+Allocates a specific number of bytes of data space to an existing account. The account must be a signer. Use this before assigning the account to a program that requires specific data storage.
+
+### Request
+
+<ResponseField name="account" type="Base58-encoded public key (string)" required>
+  The account to allocate space for. Must be a signer.
+</ResponseField>
+
+<ResponseField name="space" type="uint64" required>
+  Number of bytes to allocate. Programs typically have fixed data layout sizes.
+</ResponseField>
+
+### Response
+
+<ResponseField name="instruction" type="SolanaInstruction (object)">
+  The allocate instruction. Add this to a transaction and submit it via the Transaction Service.
+</ResponseField>
+
+### Code Examples
+
+<CodeGroup>
+```go Go
+resp, err := client.Allocate(ctx, &system_v1.AllocateRequest{
+    Account: "7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtV",
+    Space:   165,
+})
+if err != nil {
+    log.Fatal(err)
+}
+// Add instruction to your transaction
+instruction := resp.Instruction
+```
+```rust Rust
+let response = client.allocate(tonic::Request::new(AllocateRequest {
+    account: "7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtV".to_string(),
+    space: 165,
+})).await?;
+// Add instruction to your transaction
+let instruction = response.into_inner().instruction.unwrap();
+```
+```typescript TypeScript
+const req = new AllocateRequest();
+req.setAccount("7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtV");
+req.setSpace(165);
+client.allocate(req, (err, response) => {
+  // Add instruction to your transaction
+  const instruction = response.getInstruction();
+});
+```
+</CodeGroup>
+
+---
+
+## AllocateWithSeed
+
+Allocates space for a seed-derived account. The base key must sign the transaction — not the derived account address.
+
+### Request
+
+<ResponseField name="account" type="Base58-encoded public key (string)" required>
+  The seed-derived account address to allocate space for.
+</ResponseField>
+
+<ResponseField name="base" type="Base58-encoded public key (string)" required>
+  Base public key used to derive `account`. Must be a signer.
+</ResponseField>
+
+<ResponseField name="seed" type="string" required>
+  Seed string used to derive `account`.
+</ResponseField>
+
+<ResponseField name="space" type="uint64" required>
+  Number of bytes to allocate.
+</ResponseField>
+
+### Response
+
+<ResponseField name="instruction" type="SolanaInstruction (object)">
+  The allocate_with_seed instruction. Add this to a transaction and submit it via the Transaction Service.
+</ResponseField>
+
+### Code Examples
+
+<CodeGroup>
+```go Go
+resp, err := client.AllocateWithSeed(ctx, &system_v1.AllocateWithSeedRequest{
+    Account: "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin",
+    Base:    "7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtV",
+    Seed:    "my-program-data",
+    Space:   165,
+})
+if err != nil {
+    log.Fatal(err)
+}
+// Add instruction to your transaction
+instruction := resp.Instruction
+```
+```rust Rust
+let response = client.allocate_with_seed(tonic::Request::new(AllocateWithSeedRequest {
+    account: "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin".to_string(),
+    base: "7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtV".to_string(),
+    seed: "my-program-data".to_string(),
+    space: 165,
+})).await?;
+// Add instruction to your transaction
+let instruction = response.into_inner().instruction.unwrap();
+```
+```typescript TypeScript
+const req = new AllocateWithSeedRequest();
+req.setAccount("9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin");
+req.setBase("7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtV");
+req.setSeed("my-program-data");
+req.setSpace(165);
+client.allocateWithSeed(req, (err, response) => {
+  // Add instruction to your transaction
+  const instruction = response.getInstruction();
+});
+```
+</CodeGroup>

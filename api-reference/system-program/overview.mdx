@@ -1,0 +1,20 @@
+---
+title: "System Program Service"
+description: "Build Solana System Program instructions for account creation, SOL transfers, space allocation, and durable nonce management."
+---
+
+System Program Service methods are instruction builders — each method returns a [SolanaInstruction](/api-reference/shared-types) that you add to a transaction, compile, sign, and submit via the Transaction Service. No instruction executes on-chain until it is part of a submitted transaction. See [Instructions & Transactions](/concepts/instructions-and-transactions) for the full pattern.
+
+<Note>
+  System Program methods return SolanaInstruction objects. To execute them on-chain, add the instructions to a transaction and use the Transaction Service. See [Instructions & Transactions](/concepts/instructions-and-transactions).
+</Note>
+
+## Methods
+
+| Method | Description | Page |
+|--------|-------------|------|
+| Create / CreateWithSeed | Create a new account or a seed-derived account | [Create Account](/api-reference/system-program/create) |
+| Transfer / TransferWithSeed | Transfer SOL or transfer from a seed-derived account | [Transfer SOL](/api-reference/system-program/transfer) |
+| Allocate / AllocateWithSeed | Allocate space for an account | [Allocate](/api-reference/system-program/allocate) |
+| Assign / AssignWithSeed | Change the owner of an account | [Assign](/api-reference/system-program/assign) |
+| Nonce Operations (5 methods) | Initialize, authorize, withdraw, advance, and upgrade nonce accounts for durable transactions | [Nonce Operations](/api-reference/system-program/nonce-operations) |

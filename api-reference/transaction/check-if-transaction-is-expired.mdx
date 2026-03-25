@@ -1,0 +1,72 @@
+---
+title: "CheckIfTransactionIsExpired"
+description: "Check whether a compiled transaction's blockhash has expired."
+---
+
+import CommitmentLevelNote from "/snippets/commitment-level-note.mdx";
+
+Checks if a compiled transaction's `recent_blockhash` has aged out. Solana transactions expire approximately 150 slots (~2 minutes on mainnet) after their blockhash was created. An expired transaction cannot be submitted — it must be recompiled.
+
+<Note>
+  If `is_expired` is true, call [CompileTransaction](/api-reference/transaction/compile-transaction) again to get a fresh blockhash.
+  Expiry cannot be recovered — the existing compiled transaction bytes must be discarded.
+</Note>
+
+## Request
+
+<ResponseField name="transaction" type="Transaction (object)" required>
+  Transaction to check (must be in COMPILED or later state).
+</ResponseField>
+
+<ResponseField name="commitment_level" type="CommitmentLevel (enum)">
+  Optional. Commitment level for blockhash freshness check. Defaults to CONFIRMED.
+</ResponseField>
+
+<CommitmentLevelNote />
+
+## Response
+
+<ResponseField name="is_expired" type="bool">
+  True if the transaction's blockhash has expired and the transaction must be recompiled before submission. False if the blockhash is still fresh.
+</ResponseField>
+
+## Code Examples
+
+<CodeGroup>
+
+```go Go
+resp, err := client.CheckIfTransactionIsExpired(ctx, &transaction_v1.CheckIfTransactionIsExpiredRequest{
+    Transaction: compiledTxn,
+})
+if err != nil {
+    log.Fatal(err)
+}
+if resp.IsExpired {
+    fmt.Println("Transaction expired — recompile required")
+    // call CompileTransaction again
+}
+```
+
+```rust Rust
+let response = client.check_if_transaction_is_expired(tonic::Request::new(
+    CheckIfTransactionIsExpiredRequest {
+        transaction: Some(compiled_txn),
+        ..Default::default()
+    }
+)).await?;
+if response.into_inner().is_expired {
+    println!("Transaction expired — recompile required");
+}
+```
+
+```typescript TypeScript
+const req = new CheckIfTransactionIsExpiredRequest();
+req.setTransaction(compiledTxn);
+client.checkIfTransactionIsExpired(req, (err, response) => {
+  if (response.getIsExpired()) {
+    console.log("Transaction expired — recompile required");
+  }
+});
+```
+
+</CodeGroup>

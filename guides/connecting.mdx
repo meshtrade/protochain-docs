@@ -1,0 +1,104 @@
+---
+title: "Connecting to Protochain"
+description: "Set up your gRPC client in Go, Rust, or TypeScript to connect to the Protochain server."
+---
+
+Protochain is a gRPC API. Unlike REST where you construct URLs and call them directly, gRPC requires you to create a channel to the server and instantiate a typed client stub before making any calls. This page shows that setup for each supported SDK.
+
+## What you'll need
+
+<Note>
+  Before connecting, make sure you have:
+  - The appropriate language SDK installed (Go, Rust, or TypeScript)
+  - The Protochain server endpoint (host and port) for your environment
+  - Clarity on whether your environment requires TLS — local development typically uses plaintext; production environments require TLS
+</Note>
+
+## Connection setup
+
+<CodeGroup>
+
+```go Go
+package main
+
+import (
+    "log"
+
+    "google.golang.org/grpc"
+    "google.golang.org/grpc/credentials/insecure"
+    account_v1 "github.com/meshtrade/protochain/lib/go/protochain/solana/account/v1"
+)
+
+func main() {
+    // Create a channel to the Protochain server.
+    // grpc.NewClient establishes the logical connection; the actual TCP
+    // connection is made lazily on the first RPC call.
+    conn, err := grpc.NewClient("YOUR_ENDPOINT:50051",
+        grpc.WithTransportCredentials(insecure.NewCredentials()),
+    )
+    if err != nil {
+        log.Fatalf("failed to connect: %v", err)
+    }
+    // Close the channel when your program exits to release the connection.
+    defer conn.Close()
+
+    // Instantiate a typed client stub for the service you want to call.
+    // Replace account_v1 with the service package you need.
+    client := account_v1.NewServiceClient(conn)
+    _ = client // use client to make calls
+}
+```
+
+```rust Rust
+use protochain::solana::account::v1::service_client::ServiceClient;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Connect to the Protochain server.
+    // The URL scheme controls TLS: use http:// for plaintext, https:// for TLS.
+    let mut client = ServiceClient::connect("http://YOUR_ENDPOINT:50051").await?;
+
+    // client is ready to use
+    Ok(())
+}
+```
+
+```typescript TypeScript
+import * as grpc from '@grpc/grpc-js';
+import { ServiceClient } from '@protochain/solana-account-v1';
+
+// credentials.createInsecure() opens a plaintext connection.
+// Use credentials.createSsl() for TLS-secured connections.
+const client = new ServiceClient(
+  'YOUR_ENDPOINT:50051',
+  grpc.credentials.createInsecure()
+);
+```
+
+</CodeGroup>
+
+## Switching services
+
+Each Protochain service has its own generated client stub. To use a different service, import that service's package and instantiate its client. In Go, you can reuse the same `conn` across multiple stubs — opening one channel and sharing it is more efficient than creating a channel per service. In Rust and TypeScript, call `.connect()` or instantiate a new client for each service.
+
+Import paths by language:
+
+- **Go:** `github.com/meshtrade/protochain/lib/go/protochain/solana/[service]/v1`
+- **Rust:** `protochain::solana::[service]::v1::service_client::ServiceClient`
+- **TypeScript:** `@protochain/solana-[service]-v1`
+
+Replace `[service]` with the service name: `account`, `transaction`, `system_program`, `token_program`, or `rpc_client`.
+
+## TLS and credentials
+
+The examples above use plaintext connections (no TLS), which is appropriate for local development. For production environments:
+
+- **Go:** Replace `insecure.NewCredentials()` with your TLS credentials (e.g., `credentials.NewTLS(&tls.Config{})`)
+- **Rust:** Replace `http://` with `https://` in the endpoint URL
+- **TypeScript:** Replace `credentials.createInsecure()` with `credentials.createSsl()`
+
+Contact the Protochain team for the endpoint address and TLS configuration for your environment.
+
+---
+
+Once connected, follow the [Quickstart](/guides/quickstart) to make your first API calls.

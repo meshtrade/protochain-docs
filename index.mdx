@@ -1,0 +1,68 @@
+---
+title: "Protochain"
+description: "Language-agnostic gRPC APIs for Solana. Access any SDK from any language."
+mode: "wide"
+---
+
+## Best Solana SDK not in your language?
+
+The best Solana SDKs are written in Rust and TypeScript. If you're building in Go — or any other language — you're working around the ecosystem rather than with it.
+
+Protochain wraps Solana SDK operations behind a gRPC API. Your language connects to the Protochain server; the server handles the Solana SDK calls. You get the full SDK surface in Go, Rust, TypeScript, or any language with gRPC support.
+
+<Columns cols={2}>
+  <Card
+    title="Get Started"
+    icon="rocket"
+    href="/guides/quickstart"
+  >
+    Connect to Protochain and make your first API call in under 5 minutes.
+  </Card>
+  <Card
+    title="API Reference"
+    icon="book-open"
+    href="/api-reference/index"
+  >
+    Browse all 5 gRPC services, request/response types, and code examples.
+  </Card>
+</Columns>
+
+## Services
+
+<Columns cols={2}>
+  <Card
+    title="Account Service"
+    icon="wallet"
+    href="/api-reference/account/overview"
+  >
+    Look up accounts, generate key pairs, fund accounts on devnet, and query token balances.
+  </Card>
+  <Card
+    title="Transaction Service"
+    icon="arrows-rotate"
+    href="/api-reference/transaction/overview"
+  >
+    Compile, sign, simulate, and submit transactions through the full lifecycle: DRAFT → COMPILED → SIGNED → SUBMITTED.
+  </Card>
+  <Card
+    title="System Program Service"
+    icon="gear"
+    href="/api-reference/system-program/overview"
+  >
+    Build Solana system program instructions — create accounts, transfer SOL, manage nonces.
+  </Card>
+  <Card
+    title="Token Program Service"
+    icon="coins"
+    href="/api-reference/token-program/overview"
+  >
+    Create and manage SPL Token and Token-2022 mints, holding accounts, and token operations.
+  </Card>
+  <Card
+    title="RPC Client Service"
+    icon="server"
+    href="/api-reference/rpc-client/overview"
+  >
+    Direct Solana RPC utilities — query rent exemption minimums and network state.
+  </Card>
+</Columns>

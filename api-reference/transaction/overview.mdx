@@ -1,0 +1,19 @@
+---
+title: "Transaction Service"
+description: "Compile, sign, simulate, and submit Solana transactions through the full lifecycle."
+---
+
+The Transaction Service manages the complete Solana transaction lifecycle — from draft construction through compilation, signing, and on-chain submission. Every transaction progresses through a defined set of states: DRAFT → COMPILED → PARTIALLY_SIGNED → FULLY_SIGNED → submitted. See the [Transaction Lifecycle](/concepts/transaction-lifecycle) concept page for a full walkthrough with state machine diagram.
+
+## Methods
+
+| Method | Description | State Transition |
+|--------|-------------|-----------------|
+| [CompileTransaction](/api-reference/transaction/compile-transaction) | Serialize a draft transaction to wire format, fetching the latest blockhash. | DRAFT → COMPILED |
+| [EstimateTransaction](/api-reference/transaction/estimate-transaction) | Estimate compute units and fee lamports for a compiled transaction. | None (read-only) |
+| [SimulateTransaction](/api-reference/transaction/simulate-transaction) | Dry-run a transaction against current ledger state without committing it. | None (read-only) |
+| [SignTransaction](/api-reference/transaction/sign-transaction) | Add one or more cryptographic signatures to a compiled transaction. | COMPILED → PARTIALLY_SIGNED → FULLY_SIGNED |
+| [CheckIfTransactionIsExpired](/api-reference/transaction/check-if-transaction-is-expired) | Check whether a compiled transaction's blockhash has expired (~150 slots). | None (read-only) |
+| [SubmitTransaction](/api-reference/transaction/submit-transaction) | Broadcast a fully signed transaction to the Solana network. | FULLY_SIGNED → submitted |
+| [GetTransaction](/api-reference/transaction/get-transaction) | Look up an on-chain transaction by signature. | None (read-only) |
+| [MonitorTransaction](/api-reference/transaction/monitor-transaction) | Stream real-time status updates for a submitted transaction. | Streaming RPC |

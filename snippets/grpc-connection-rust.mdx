@@ -1,0 +1,7 @@
+```rust Rust
+use protochain::solana::account::v1::service_client::ServiceClient;
+
+let mut client = ServiceClient::connect("http://localhost:50051").await?;
+```
+
+<Note>See [Connecting to Protochain](/guides/connecting) for TLS setup, authentication, and production configuration.</Note>

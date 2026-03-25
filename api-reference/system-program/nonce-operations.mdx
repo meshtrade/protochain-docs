@@ -1,0 +1,301 @@
+---
+title: "Nonce Operations"
+description: "Build System Program instructions to create and manage nonce accounts for durable, expiration-resistant Solana transactions."
+---
+
+Regular Solana transactions expire after roughly 150 slots (~60 seconds) because they include a recent blockhash. Nonce accounts store a durable blockhash that doesn't expire, allowing a transaction to be signed offline, stored, and submitted later. This is essential for multi-sig workflows, hardware signing flows, and scheduled transactions where the time between signing and submission exceeds the normal expiration window.
+
+<Note>
+  All nonce operation methods return SolanaInstruction objects. Add them to a
+  transaction and use the Transaction Service to execute on-chain. See
+  [Instructions & Transactions](/concepts/instructions-and-transactions).
+</Note>
+
+---
+
+## InitializeNonceAccount
+
+Initializes a nonce account, storing a durable blockhash. The nonce account must already exist with enough lamports for rent exemption and allocated space. Create it first using the System Program Create method with `space: 80`.
+
+### Request
+
+<ResponseField name="nonce_account" type="Base58-encoded public key (string)" required>
+  The account to initialize as a nonce account. Must already exist.
+</ResponseField>
+
+<ResponseField name="authority" type="Base58-encoded public key (string)" required>
+  The authority that can authorize future nonce operations.
+</ResponseField>
+
+### Response
+
+<ResponseField name="instruction" type="SolanaInstruction (object)">
+  The initialize_nonce_account instruction. Add this to a transaction and submit it via the Transaction Service.
+</ResponseField>
+
+### Code Examples
+
+<CodeGroup>
+```go Go
+resp, err := client.InitializeNonceAccount(ctx, &system_v1.InitializeNonceAccountRequest{
+    NonceAccount: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d",
+    Authority:    "7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtV",
+})
+if err != nil {
+    log.Fatal(err)
+}
+// Add instruction to your transaction
+instruction := resp.Instruction
+```
+```rust Rust
+let response = client.initialize_nonce_account(tonic::Request::new(InitializeNonceAccountRequest {
+    nonce_account: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d".to_string(),
+    authority: "7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtV".to_string(),
+})).await?;
+// Add instruction to your transaction
+let instruction = response.into_inner().instruction.unwrap();
+```
+```typescript TypeScript
+const req = new InitializeNonceAccountRequest();
+req.setNonceAccount("5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d");
+req.setAuthority("7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtV");
+client.initializeNonceAccount(req, (err, response) => {
+  // Add instruction to your transaction
+  const instruction = response.getInstruction();
+});
+```
+</CodeGroup>
+
+---
+
+## AuthorizeNonceAccount
+
+Changes the authority of a nonce account. The current authority must sign the transaction.
+
+### Request
+
+<ResponseField name="nonce_account" type="Base58-encoded public key (string)" required>
+  The nonce account to update.
+</ResponseField>
+
+<ResponseField name="current_authority" type="Base58-encoded public key (string)" required>
+  The current authority. Must be a signer.
+</ResponseField>
+
+<ResponseField name="new_authority" type="Base58-encoded public key (string)" required>
+  The new authority.
+</ResponseField>
+
+### Response
+
+<ResponseField name="instruction" type="SolanaInstruction (object)">
+  The authorize_nonce_account instruction. Add this to a transaction and submit it via the Transaction Service.
+</ResponseField>
+
+### Code Examples
+
+<CodeGroup>
+```go Go
+resp, err := client.AuthorizeNonceAccount(ctx, &system_v1.AuthorizeNonceAccountRequest{
+    NonceAccount:     "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d",
+    CurrentAuthority: "7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtV",
+    NewAuthority:     "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin",
+})
+if err != nil {
+    log.Fatal(err)
+}
+// Add instruction to your transaction
+instruction := resp.Instruction
+```
+```rust Rust
+let response = client.authorize_nonce_account(tonic::Request::new(AuthorizeNonceAccountRequest {
+    nonce_account: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d".to_string(),
+    current_authority: "7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtV".to_string(),
+    new_authority: "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin".to_string(),
+})).await?;
+// Add instruction to your transaction
+let instruction = response.into_inner().instruction.unwrap();
+```
+```typescript TypeScript
+const req = new AuthorizeNonceAccountRequest();
+req.setNonceAccount("5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d");
+req.setCurrentAuthority("7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtV");
+req.setNewAuthority("9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin");
+client.authorizeNonceAccount(req, (err, response) => {
+  // Add instruction to your transaction
+  const instruction = response.getInstruction();
+});
+```
+</CodeGroup>
+
+---
+
+## WithdrawNonceAccount
+
+Withdraws lamports from a nonce account back to a destination. If the withdrawal leaves the account below the rent-exempt balance, the account is closed.
+
+### Request
+
+<ResponseField name="nonce_account" type="Base58-encoded public key (string)" required>
+  The nonce account to withdraw from.
+</ResponseField>
+
+<ResponseField name="authority" type="Base58-encoded public key (string)" required>
+  The nonce account's authority. Must be a signer.
+</ResponseField>
+
+<ResponseField name="to" type="Base58-encoded public key (string)" required>
+  Destination account for the withdrawn lamports.
+</ResponseField>
+
+<ResponseField name="lamports" type="uint64" required>
+  Amount to withdraw, in lamports.
+</ResponseField>
+
+### Response
+
+<ResponseField name="instruction" type="SolanaInstruction (object)">
+  The withdraw_nonce_account instruction. Add this to a transaction and submit it via the Transaction Service.
+</ResponseField>
+
+### Code Examples
+
+<CodeGroup>
+```go Go
+resp, err := client.WithdrawNonceAccount(ctx, &system_v1.WithdrawNonceAccountRequest{
+    NonceAccount: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d",
+    Authority:    "7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtV",
+    To:           "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin",
+    Lamports:     1000000000,
+})
+if err != nil {
+    log.Fatal(err)
+}
+// Add instruction to your transaction
+instruction := resp.Instruction
+```
+```rust Rust
+let response = client.withdraw_nonce_account(tonic::Request::new(WithdrawNonceAccountRequest {
+    nonce_account: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d".to_string(),
+    authority: "7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtV".to_string(),
+    to: "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin".to_string(),
+    lamports: 1_000_000_000,
+})).await?;
+// Add instruction to your transaction
+let instruction = response.into_inner().instruction.unwrap();
+```
+```typescript TypeScript
+const req = new WithdrawNonceAccountRequest();
+req.setNonceAccount("5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d");
+req.setAuthority("7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtV");
+req.setTo("9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin");
+req.setLamports(1000000000);
+client.withdrawNonceAccount(req, (err, response) => {
+  // Add instruction to your transaction
+  const instruction = response.getInstruction();
+});
+```
+</CodeGroup>
+
+---
+
+## AdvanceNonceAccount
+
+Advances the nonce account to use the next blockhash. Include this as the first instruction in any transaction that uses a nonce account — it invalidates the current nonce value to prevent replay attacks.
+
+### Request
+
+<ResponseField name="nonce_account" type="Base58-encoded public key (string)" required>
+  The nonce account to advance.
+</ResponseField>
+
+<ResponseField name="authority" type="Base58-encoded public key (string)" required>
+  The nonce account's authority. Must be a signer.
+</ResponseField>
+
+### Response
+
+<ResponseField name="instruction" type="SolanaInstruction (object)">
+  The advance_nonce_account instruction. Add this as the first instruction in your nonce-backed transaction.
+</ResponseField>
+
+### Code Examples
+
+<CodeGroup>
+```go Go
+resp, err := client.AdvanceNonceAccount(ctx, &system_v1.AdvanceNonceAccountRequest{
+    NonceAccount: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d",
+    Authority:    "7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtV",
+})
+if err != nil {
+    log.Fatal(err)
+}
+// Add instruction to your transaction (must be first)
+instruction := resp.Instruction
+```
+```rust Rust
+let response = client.advance_nonce_account(tonic::Request::new(AdvanceNonceAccountRequest {
+    nonce_account: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d".to_string(),
+    authority: "7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtV".to_string(),
+})).await?;
+// Add instruction to your transaction (must be first)
+let instruction = response.into_inner().instruction.unwrap();
+```
+```typescript TypeScript
+const req = new AdvanceNonceAccountRequest();
+req.setNonceAccount("5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d");
+req.setAuthority("7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtV");
+client.advanceNonceAccount(req, (err, response) => {
+  // Add instruction to your transaction (must be first)
+  const instruction = response.getInstruction();
+});
+```
+</CodeGroup>
+
+---
+
+## UpgradeNonceAccount
+
+Upgrades a legacy nonce account to the current nonce account format. Only relevant for nonce accounts created before the nonce format upgrade on mainnet.
+
+### Request
+
+<ResponseField name="nonce_account" type="Base58-encoded public key (string)" required>
+  The legacy nonce account to upgrade.
+</ResponseField>
+
+### Response
+
+<ResponseField name="instruction" type="SolanaInstruction (object)">
+  The upgrade_nonce_account instruction. Add this to a transaction and submit it via the Transaction Service.
+</ResponseField>
+
+### Code Examples
+
+<CodeGroup>
+```go Go
+resp, err := client.UpgradeNonceAccount(ctx, &system_v1.UpgradeNonceAccountRequest{
+    NonceAccount: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d",
+})
+if err != nil {
+    log.Fatal(err)
+}
+// Add instruction to your transaction
+instruction := resp.Instruction
+```
+```rust Rust
+let response = client.upgrade_nonce_account(tonic::Request::new(UpgradeNonceAccountRequest {
+    nonce_account: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d".to_string(),
+})).await?;
+// Add instruction to your transaction
+let instruction = response.into_inner().instruction.unwrap();
+```
+```typescript TypeScript
+const req = new UpgradeNonceAccountRequest();
+req.setNonceAccount("5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d");
+client.upgradeNonceAccount(req, (err, response) => {
+  // Add instruction to your transaction
+  const instruction = response.getInstruction();
+});
+```
+</CodeGroup>

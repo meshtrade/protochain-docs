@@ -1,0 +1,98 @@
+---
+title: "ParseMint"
+description: "Parse a mint account's on-chain state — including authority, decimals, supply, token program, and Token-2022 extensions."
+---
+
+ParseMint reads a mint account and returns its structured state. It detects whether the mint belongs to the SPL Token or Token-2022 program and returns the appropriate extension or metadata data.
+
+ParseMint is a **query** method — it does not return a `SolanaInstruction`. No transaction is needed.
+
+## Request
+
+<ResponseField name="account_address" type="Base58-encoded public key (string)" required>
+  The mint account address to parse.
+</ResponseField>
+
+## Response
+
+<ResponseField name="mint" type="MintInfo (object)" required>
+  Core mint account fields.
+  <Expandable title="MintInfo fields">
+    <ResponseField name="mint_authority_pub_key" type="Base58-encoded public key (string)">
+      Authority that can mint new tokens. Empty if mint authority has been revoked.
+    </ResponseField>
+    <ResponseField name="freeze_authority_pub_key" type="Base58-encoded public key (string)">
+      Authority that can freeze token accounts. Empty if freeze is disabled.
+    </ResponseField>
+    <ResponseField name="decimals" type="uint32">
+      Decimal precision of the token.
+    </ResponseField>
+    <ResponseField name="supply" type="string">
+      Current total supply in base units. Returned as a string to avoid integer overflow for high-supply tokens.
+    </ResponseField>
+    <ResponseField name="is_initialized" type="bool">
+      `true` if the mint account has been initialized.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="token_program" type="TokenProgram (enum)" required>
+  Indicates which token program owns this mint. Either `TOKEN_PROGRAM_SPL_TOKEN` (legacy SPL Token) or `TOKEN_PROGRAM_TOKEN_2022` (Token Extensions). See [TokenProgram](/api-reference/shared-types#tokenprogram).
+</ResponseField>
+
+<ResponseField name="extensions" type="Token2022Extension[] (repeated)">
+  Token-2022 extensions configured on this mint. Empty for SPL Token mints.
+</ResponseField>
+
+<ResponseField name="metaplex_metadata" type="MetaplexTokenMetadata (object)">
+  Metaplex on-chain metadata. Only present for SPL Token mints that were created with `CreateSPLTokenMint` and included metadata.
+  <Expandable title="MetaplexTokenMetadata fields">
+    <ResponseField name="name" type="string">
+      Token name.
+    </ResponseField>
+    <ResponseField name="symbol" type="string">
+      Token symbol.
+    </ResponseField>
+    <ResponseField name="uri" type="string">
+      URI pointing to off-chain metadata JSON.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Code Examples
+
+<CodeGroup>
+```go Go
+resp, err := client.ParseMint(ctx, &token_v1.ParseMintRequest{
+    AccountAddress: "YourMintAddress...",
+})
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Printf("Token program: %s\n", resp.TokenProgram)
+fmt.Printf("Decimals: %d\n", resp.Mint.Decimals)
+fmt.Printf("Supply: %s\n", resp.Mint.Supply)
+fmt.Printf("Extensions: %d\n", len(resp.Extensions))
+```
+```rust Rust
+let response = client.parse_mint(tonic::Request::new(ParseMintRequest {
+    account_address: "YourMintAddress...".to_string(),
+})).await?;
+let inner = response.into_inner();
+println!("Token program: {:?}", inner.token_program);
+println!("Decimals: {}", inner.mint.as_ref().map_or(0, |m| m.decimals));
+println!("Supply: {}", inner.mint.as_ref().map_or("", |m| &m.supply));
+println!("Extensions: {}", inner.extensions.len());
+```
+```typescript TypeScript
+const req = new ParseMintRequest();
+req.setAccountAddress("YourMintAddress...");
+client.parseMint(req, (err, response) => {
+  console.log("Token program:", response.getTokenProgram());
+  const mint = response.getMint();
+  console.log("Decimals:", mint.getDecimals());
+  console.log("Supply:", mint.getSupply());
+  console.log("Extensions:", response.getExtensionsList().length);
+});
+```
+</CodeGroup>

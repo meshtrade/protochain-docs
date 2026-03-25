@@ -1,0 +1,230 @@
+---
+title: "Create Mint"
+description: "Build the complete instruction set to create and initialize a Token-2022 or SPL Token mint account in one call."
+---
+
+Both methods return the complete ordered instruction set needed to create a mint — you don't need to separately query rent, build a System Program create instruction, or initialize the mint. The key difference is which token program the mint belongs to: Token-2022 supports extensions (like metadata); SPL Token supports Metaplex metadata via a separate program.
+
+<Tip>
+  Not sure which token program to use? See [Token Programs](/concepts/token-programs) for the trade-offs.
+</Tip>
+
+<Note>
+  These methods return instruction lists. Add them in order to a transaction and use the Transaction Service to compile, sign, and submit. See [Instructions & Transactions](/concepts/instructions-and-transactions).
+</Note>
+
+---
+
+## CreateToken2022Mint
+
+Creates and fully initializes a Token-2022 mint in one call. Returns the complete ordered instruction set: `System::CreateAccount` → extension pre-init instructions → `initialize_mint` → extension post-init instructions (e.g. token metadata, update fields).
+
+### Request
+
+<ResponseField name="payer_pub_key" type="Base58-encoded public key (string)" required>
+  Pays for account creation. Must be a signer.
+</ResponseField>
+
+<ResponseField name="mint_pub_key" type="Base58-encoded public key (string)" required>
+  The mint account to create. Must be a signer (new keypair).
+</ResponseField>
+
+<ResponseField name="mint_authority_pub_key" type="Base58-encoded public key (string)" required>
+  The authority that can mint new tokens.
+</ResponseField>
+
+<ResponseField name="freeze_authority_pub_key" type="Base58-encoded public key (string)">
+  Optional. Authority that can freeze token accounts. Omit to disable freeze.
+</ResponseField>
+
+<ResponseField name="decimals" type="uint32" required>
+  Decimal precision. Common values: `9` (SOL-like), `6` (USDC-like), `0` (NFTs).
+</ResponseField>
+
+<ResponseField name="extensions" type="Token2022Extension[] (repeated)">
+  Optional. Token-2022 extensions to enable at initialization. Extensions cannot be added after mint creation. Currently supported: metadata extension. Transfer hooks, transfer fees, and other extensions are coming soon.
+  <Expandable title="Token2022Extension fields">
+    <ResponseField name="metadata" type="Token2022ExtensionMetadata (object)">
+      Embed token metadata directly in the mint account.
+      <Expandable title="Token2022ExtensionMetadata fields">
+        <ResponseField name="name" type="string">
+          Token name (e.g. "My Token").
+        </ResponseField>
+        <ResponseField name="symbol" type="string">
+          Token symbol (e.g. "MTK").
+        </ResponseField>
+        <ResponseField name="uri" type="string">
+          URI pointing to off-chain metadata JSON.
+        </ResponseField>
+        <ResponseField name="additional_metadata" type="key-value pairs (repeated)">
+          Additional custom metadata fields as key-value pairs.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Response
+
+<ResponseField name="instructions" type="SolanaInstruction[] (repeated)" required>
+  Ordered instructions. Submit in this exact order: `System::CreateAccount` → extension pre-init → `initialize_mint` → extension post-init.
+</ResponseField>
+
+<ResponseField name="lamports" type="uint64">
+  Lamports deposited for rent exemption. Covers base mint size plus variable extension data.
+</ResponseField>
+
+<ResponseField name="space" type="uint64">
+  Initial bytes allocated by `System::CreateAccount`. Token-2022 may realloc beyond this for variable-length extension data.
+</ResponseField>
+
+### Code Examples
+
+<CodeGroup>
+```go Go
+resp, err := client.CreateToken2022Mint(ctx, &token_v1.CreateToken2022MintRequest{
+    PayerPubKey:          "YourPayerAddress...",
+    MintPubKey:           "YourNewMintAddress...",
+    MintAuthorityPubKey:  "YourMintAuthorityAddress...",
+    Decimals:             6,
+    // Extensions: []*token_v1.Token2022Extension{...}, // optional
+})
+if err != nil {
+    log.Fatal(err)
+}
+// Add all instructions to your transaction in order
+for _, instr := range resp.Instructions {
+    tx.AddInstruction(instr)
+}
+```
+```rust Rust
+let response = client.create_token2022_mint(tonic::Request::new(CreateToken2022MintRequest {
+    payer_pub_key: "YourPayerAddress...".to_string(),
+    mint_pub_key: "YourNewMintAddress...".to_string(),
+    mint_authority_pub_key: "YourMintAuthorityAddress...".to_string(),
+    decimals: 6,
+    ..Default::default()
+})).await?;
+// Add all instructions to your transaction in order
+for instr in response.into_inner().instructions {
+    tx.add_instruction(instr);
+}
+```
+```typescript TypeScript
+const req = new CreateToken2022MintRequest();
+req.setPayerPubKey("YourPayerAddress...");
+req.setMintPubKey("YourNewMintAddress...");
+req.setMintAuthorityPubKey("YourMintAuthorityAddress...");
+req.setDecimals(6);
+client.createToken2022Mint(req, (err, response) => {
+  // Add all instructions to your transaction in order
+  for (const instr of response.getInstructionsList()) {
+    tx.addInstruction(instr);
+  }
+});
+```
+</CodeGroup>
+
+---
+
+## CreateSPLTokenMint
+
+Creates and fully initializes a legacy SPL Token mint. Returns `System::CreateAccount` + `initialize_mint` + optional Metaplex `CreateMetadataAccountV3`. Space is always 82 bytes for SPL Token mints.
+
+### Request
+
+<ResponseField name="payer_pub_key" type="Base58-encoded public key (string)" required>
+  Pays for account creation. Must be a signer.
+</ResponseField>
+
+<ResponseField name="mint_pub_key" type="Base58-encoded public key (string)" required>
+  The mint account to create. Must be a signer (new keypair).
+</ResponseField>
+
+<ResponseField name="mint_authority_pub_key" type="Base58-encoded public key (string)" required>
+  The authority that can mint new tokens.
+</ResponseField>
+
+<ResponseField name="freeze_authority_pub_key" type="Base58-encoded public key (string)">
+  Optional. Authority that can freeze token accounts. Omit to disable freeze.
+</ResponseField>
+
+<ResponseField name="decimals" type="uint32" required>
+  Decimal precision. Common values: `9` (SOL-like), `6` (USDC-like), `0` (NFTs).
+</ResponseField>
+
+<ResponseField name="metadata" type="MetaplexTokenMetadata (object)">
+  Optional. Metaplex on-chain metadata. When provided, appends a `CreateMetadataAccountV3` instruction.
+  <Expandable title="MetaplexTokenMetadata fields">
+    <ResponseField name="name" type="string">
+      Token name (e.g. "My Token").
+    </ResponseField>
+    <ResponseField name="symbol" type="string">
+      Token symbol (e.g. "MTK").
+    </ResponseField>
+    <ResponseField name="uri" type="string">
+      URL pointing to the off-chain metadata JSON (e.g. Arweave or IPFS link).
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Response
+
+<ResponseField name="instructions" type="SolanaInstruction[] (repeated)" required>
+  Ordered: `System::CreateAccount`, `initialize_mint`, and optionally `CreateMetadataAccountV3`.
+</ResponseField>
+
+<ResponseField name="lamports" type="uint64">
+  Rent exemption lamports for the mint account.
+</ResponseField>
+
+<ResponseField name="space" type="uint64">
+  Always `82` for SPL Token mints.
+</ResponseField>
+
+### Code Examples
+
+<CodeGroup>
+```go Go
+resp, err := client.CreateSPLTokenMint(ctx, &token_v1.CreateSPLTokenMintRequest{
+    PayerPubKey:         "YourPayerAddress...",
+    MintPubKey:          "YourNewMintAddress...",
+    MintAuthorityPubKey: "YourMintAuthorityAddress...",
+    Decimals:            6,
+    // Metadata: &token_v1.MetaplexTokenMetadata{...}, // optional
+})
+if err != nil {
+    log.Fatal(err)
+}
+// Add all instructions to your transaction in order
+for _, instr := range resp.Instructions {
+    tx.AddInstruction(instr)
+}
+```
+```rust Rust
+let response = client.create_spl_token_mint(tonic::Request::new(CreateSPLTokenMintRequest {
+    payer_pub_key: "YourPayerAddress...".to_string(),
+    mint_pub_key: "YourNewMintAddress...".to_string(),
+    mint_authority_pub_key: "YourMintAuthorityAddress...".to_string(),
+    decimals: 6,
+    ..Default::default()
+})).await?;
+// Add all instructions to your transaction in order
+for instr in response.into_inner().instructions {
+    tx.add_instruction(instr);
+}
+```
+```typescript TypeScript
+const req = new CreateSPLTokenMintRequest();
+req.setPayerPubKey("YourPayerAddress...");
+req.setMintPubKey("YourNewMintAddress...");
+req.setMintAuthorityPubKey("YourMintAuthorityAddress...");
+req.setDecimals(6);
+client.createSplTokenMint(req, (err, response) => {
+  // Add all instructions to your transaction in order
+  for (const instr of response.getInstructionsList()) {
+    tx.addInstruction(instr);
+  }
+});
+```
+</CodeGroup>

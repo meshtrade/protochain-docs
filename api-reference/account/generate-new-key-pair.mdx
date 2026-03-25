@@ -1,0 +1,70 @@
+---
+title: "GenerateNewKeyPair"
+description: "Generate a new Ed25519 keypair for use with Solana."
+---
+
+Generates a new Ed25519 keypair. Supply a hex-encoded seed for deterministic generation (useful for testing or key recovery) or omit it for a random keypair.
+
+<Warning>
+  The private key is returned in plaintext over the gRPC connection. Use TLS in production.
+  Never log or store the private key in an insecure location.
+</Warning>
+
+## Request
+
+<ResponseField name="seed" type="Hex-encoded string (optional)">
+  Optional. 32-byte hex-encoded seed for deterministic keypair generation. If omitted, a cryptographically random keypair is generated.
+</ResponseField>
+
+## Response
+
+<ResponseField name="key_pair" type="KeyPair (object)">
+  The generated keypair. See [KeyPair](/api-reference/shared-types#keypair) for field definitions.
+</ResponseField>
+
+## Code Examples
+
+<CodeGroup>
+```go Go
+// Random keypair
+resp, err := client.GenerateNewKeyPair(ctx, &account_v1.GenerateNewKeyPairRequest{})
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Printf("Public key: %s\n", resp.KeyPair.PublicKey)
+
+// Deterministic keypair from seed
+respDet, err := client.GenerateNewKeyPair(ctx, &account_v1.GenerateNewKeyPairRequest{
+    Seed: "a1b2c3d4e5f6...", // 32-byte hex seed
+})
+```
+```rust Rust
+// Random keypair
+let response = client.generate_new_key_pair(tonic::Request::new(
+    GenerateNewKeyPairRequest::default()
+)).await?;
+let kp = response.into_inner().key_pair.unwrap();
+println!("Public key: {}", kp.public_key);
+
+// Deterministic keypair
+let det_response = client.generate_new_key_pair(tonic::Request::new(
+    GenerateNewKeyPairRequest {
+        seed: "a1b2c3d4e5f6...".to_string(), // 32-byte hex seed
+        ..Default::default()
+    }
+)).await?;
+```
+```typescript TypeScript
+// Random keypair
+const req = new GenerateNewKeyPairRequest();
+client.generateNewKeyPair(req, (err, response) => {
+  const kp = response.getKeyPair();
+  console.log("Public key:", kp.getPublicKey());
+});
+
+// Deterministic keypair
+const detReq = new GenerateNewKeyPairRequest();
+detReq.setSeed("a1b2c3d4e5f6..."); // 32-byte hex seed
+client.generateNewKeyPair(detReq, (err, response) => { /* use response */ });
+```
+</CodeGroup>

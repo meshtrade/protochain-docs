@@ -1,0 +1,148 @@
+---
+title: "Transfer SOL"
+description: "Build a System Program instruction to transfer SOL between accounts, with or without a seed-derived sender."
+---
+
+Transfers SOL (in lamports) between Solana accounts.
+
+<Note>
+  This method returns a SolanaInstruction. Add it to a transaction and use the Transaction Service to execute it on-chain. See [Instructions & Transactions](/concepts/instructions-and-transactions).
+</Note>
+
+## Transfer
+
+Transfers SOL (in lamports) from one account to another.
+
+### Request
+
+<ResponseField name="from" type="Base58-encoded public key (string)" required>
+  The sender account. Must be a signer.
+</ResponseField>
+
+<ResponseField name="to" type="Base58-encoded public key (string)" required>
+  The recipient account.
+</ResponseField>
+
+<ResponseField name="lamports" type="uint64" required>
+  Amount of SOL to transfer, in lamports. 1 SOL = 1,000,000,000 lamports.
+</ResponseField>
+
+### Response
+
+<ResponseField name="instruction" type="SolanaInstruction (object)">
+  The System Program transfer instruction. Add to a transaction via CompileTransaction.
+</ResponseField>
+
+### Code Examples
+
+<CodeGroup>
+```go Go
+resp, err := client.Transfer(ctx, &system_v1.TransferRequest{
+    From:     "YOUR_SENDER_ADDRESS",
+    To:       "YOUR_RECIPIENT_ADDRESS",
+    Lamports: 1_000_000_000, // 1 SOL
+})
+if err != nil {
+    log.Fatal(err)
+}
+// Add instruction to your transaction
+instruction := resp.Instruction
+```
+```rust Rust
+let response = client.transfer(tonic::Request::new(TransferRequest {
+    from: "YOUR_SENDER_ADDRESS".to_string(),
+    to: "YOUR_RECIPIENT_ADDRESS".to_string(),
+    lamports: 1_000_000_000, // 1 SOL
+    ..Default::default()
+})).await?;
+// Add instruction to your transaction
+let instruction = response.into_inner().instruction.unwrap();
+```
+```typescript TypeScript
+const req = new TransferRequest();
+req.setFrom("YOUR_SENDER_ADDRESS");
+req.setTo("YOUR_RECIPIENT_ADDRESS");
+req.setLamports(1_000_000_000); // 1 SOL
+client.transfer(req, (err, response) => {
+  // Add instruction to your transaction
+  const instruction = response.getInstruction();
+});
+```
+</CodeGroup>
+
+---
+
+## TransferWithSeed
+
+Transfers SOL from a seed-derived account. The sending account's address is derived from a base public key and seed, so the base key (not the derived address) signs the transaction.
+
+### Request
+
+<ResponseField name="from" type="Base58-encoded public key (string)" required>
+  The seed-derived sender account address.
+</ResponseField>
+
+<ResponseField name="from_base" type="Base58-encoded public key (string)" required>
+  Base public key used to derive `from`. This account must be a signer.
+</ResponseField>
+
+<ResponseField name="from_seed" type="string" required>
+  Seed string used to derive `from`.
+</ResponseField>
+
+<ResponseField name="to" type="Base58-encoded public key (string)" required>
+  The recipient account.
+</ResponseField>
+
+<ResponseField name="lamports" type="uint64" required>
+  Amount to transfer, in lamports. 1 SOL = 1,000,000,000 lamports.
+</ResponseField>
+
+### Response
+
+<ResponseField name="instruction" type="SolanaInstruction (object)">
+  The System Program transfer_with_seed instruction. Add to a transaction via CompileTransaction.
+</ResponseField>
+
+### Code Examples
+
+<CodeGroup>
+```go Go
+resp, err := client.TransferWithSeed(ctx, &system_v1.TransferWithSeedRequest{
+    From:      "YOUR_DERIVED_SENDER_ADDRESS",
+    FromBase:  "YOUR_BASE_ADDRESS",
+    FromSeed:  "my-seed",
+    To:        "YOUR_RECIPIENT_ADDRESS",
+    Lamports:  500_000_000, // 0.5 SOL
+})
+if err != nil {
+    log.Fatal(err)
+}
+// Add instruction to your transaction
+instruction := resp.Instruction
+```
+```rust Rust
+let response = client.transfer_with_seed(tonic::Request::new(TransferWithSeedRequest {
+    from: "YOUR_DERIVED_SENDER_ADDRESS".to_string(),
+    from_base: "YOUR_BASE_ADDRESS".to_string(),
+    from_seed: "my-seed".to_string(),
+    to: "YOUR_RECIPIENT_ADDRESS".to_string(),
+    lamports: 500_000_000, // 0.5 SOL
+    ..Default::default()
+})).await?;
+// Add instruction to your transaction
+let instruction = response.into_inner().instruction.unwrap();
+```
+```typescript TypeScript
+const req = new TransferWithSeedRequest();
+req.setFrom("YOUR_DERIVED_SENDER_ADDRESS");
+req.setFromBase("YOUR_BASE_ADDRESS");
+req.setFromSeed("my-seed");
+req.setTo("YOUR_RECIPIENT_ADDRESS");
+req.setLamports(500_000_000); // 0.5 SOL
+client.transferWithSeed(req, (err, response) => {
+  // Add instruction to your transaction
+  const instruction = response.getInstruction();
+});
+```
+</CodeGroup>

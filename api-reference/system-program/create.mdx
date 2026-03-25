@@ -1,0 +1,169 @@
+---
+title: "Create Account"
+description: "Build a System Program instruction to create a new Solana account, with or without a seed."
+---
+
+Creates a new Solana account funded with lamports and assigned to an owner program.
+
+<Note>
+  This method returns a SolanaInstruction. Add it to a transaction and use the Transaction Service to execute it on-chain. See [Instructions & Transactions](/concepts/instructions-and-transactions).
+</Note>
+
+## Create
+
+Creates a new Solana account funded with lamports and assigned to an owner program.
+
+### Request
+
+<ResponseField name="payer" type="Base58-encoded public key (string)" required>
+  The account paying for creation. Must be a signer.
+</ResponseField>
+
+<ResponseField name="new_account" type="Base58-encoded public key (string)" required>
+  The new account's public key. Must be a signer.
+</ResponseField>
+
+<ResponseField name="owner" type="Base58-encoded public key (string)">
+  Program that will own the new account. Defaults to the System Program.
+</ResponseField>
+
+<ResponseField name="lamports" type="uint64" required>
+  Lamports to deposit into the new account. Must cover rent exemption. Use [GetMinimumBalanceForRentExemption](/api-reference/rpc-client/get-minimum-balance-for-rent-exemption) to calculate.
+</ResponseField>
+
+<ResponseField name="space" type="uint64" required>
+  Bytes to allocate for the account's data. Use 0 for wallet accounts with no data.
+</ResponseField>
+
+### Response
+
+<ResponseField name="instruction" type="SolanaInstruction (object)">
+  The System Program create_account instruction. Add to a transaction via CompileTransaction.
+</ResponseField>
+
+### Code Examples
+
+<CodeGroup>
+```go Go
+resp, err := client.Create(ctx, &system_v1.CreateRequest{
+    Payer:      "YOUR_PAYER_ADDRESS",
+    NewAccount: "YOUR_NEW_ACCOUNT_ADDRESS",
+    Owner:      "11111111111111111111111111111111",
+    Lamports:   1_000_000,
+    Space:      0,
+})
+if err != nil {
+    log.Fatal(err)
+}
+// Add instruction to your transaction
+instruction := resp.Instruction
+```
+```rust Rust
+let response = client.create(tonic::Request::new(CreateRequest {
+    payer: "YOUR_PAYER_ADDRESS".to_string(),
+    new_account: "YOUR_NEW_ACCOUNT_ADDRESS".to_string(),
+    owner: "11111111111111111111111111111111".to_string(),
+    lamports: 1_000_000,
+    space: 0,
+    ..Default::default()
+})).await?;
+// Add instruction to your transaction
+let instruction = response.into_inner().instruction.unwrap();
+```
+```typescript TypeScript
+const req = new CreateRequest();
+req.setPayer("YOUR_PAYER_ADDRESS");
+req.setNewAccount("YOUR_NEW_ACCOUNT_ADDRESS");
+req.setOwner("11111111111111111111111111111111");
+req.setLamports(1_000_000);
+req.setSpace(0);
+client.create(req, (err, response) => {
+  // Add instruction to your transaction
+  const instruction = response.getInstruction();
+});
+```
+</CodeGroup>
+
+---
+
+## CreateWithSeed
+
+Creates an account at an address derived from a base public key and seed string. Useful when the account address must be deterministic.
+
+### Request
+
+<ResponseField name="payer" type="Base58-encoded public key (string)" required>
+  The account paying for creation. Must be a signer.
+</ResponseField>
+
+<ResponseField name="new_account" type="Base58-encoded public key (string)" required>
+  The derived account address. Must match `PublicKey.createWithSeed(base, seed, owner)`.
+</ResponseField>
+
+<ResponseField name="base" type="Base58-encoded public key (string)" required>
+  Base public key used to derive `new_account`.
+</ResponseField>
+
+<ResponseField name="seed" type="string" required>
+  Seed string (max 32 bytes) used to derive `new_account`.
+</ResponseField>
+
+<ResponseField name="lamports" type="uint64" required>
+  Lamports to deposit into the new account. Must cover rent exemption. Use [GetMinimumBalanceForRentExemption](/api-reference/rpc-client/get-minimum-balance-for-rent-exemption) to calculate.
+</ResponseField>
+
+<ResponseField name="space" type="uint64" required>
+  Bytes to allocate for the account's data.
+</ResponseField>
+
+### Response
+
+<ResponseField name="instruction" type="SolanaInstruction (object)">
+  The System Program create_account_with_seed instruction. Add to a transaction via CompileTransaction.
+</ResponseField>
+
+### Code Examples
+
+<CodeGroup>
+```go Go
+resp, err := client.CreateWithSeed(ctx, &system_v1.CreateWithSeedRequest{
+    Payer:      "YOUR_PAYER_ADDRESS",
+    NewAccount: "YOUR_DERIVED_ACCOUNT_ADDRESS",
+    Base:       "YOUR_BASE_ADDRESS",
+    Seed:       "my-seed",
+    Lamports:   1_000_000,
+    Space:      165,
+})
+if err != nil {
+    log.Fatal(err)
+}
+// Add instruction to your transaction
+instruction := resp.Instruction
+```
+```rust Rust
+let response = client.create_with_seed(tonic::Request::new(CreateWithSeedRequest {
+    payer: "YOUR_PAYER_ADDRESS".to_string(),
+    new_account: "YOUR_DERIVED_ACCOUNT_ADDRESS".to_string(),
+    base: "YOUR_BASE_ADDRESS".to_string(),
+    seed: "my-seed".to_string(),
+    lamports: 1_000_000,
+    space: 165,
+    ..Default::default()
+})).await?;
+// Add instruction to your transaction
+let instruction = response.into_inner().instruction.unwrap();
+```
+```typescript TypeScript
+const req = new CreateWithSeedRequest();
+req.setPayer("YOUR_PAYER_ADDRESS");
+req.setNewAccount("YOUR_DERIVED_ACCOUNT_ADDRESS");
+req.setBase("YOUR_BASE_ADDRESS");
+req.setSeed("my-seed");
+req.setLamports(1_000_000);
+req.setSpace(165);
+client.createWithSeed(req, (err, response) => {
+  // Add instruction to your transaction
+  const instruction = response.getInstruction();
+});
+```
+</CodeGroup>

@@ -1,0 +1,89 @@
+---
+title: "Transaction Lifecycle"
+description: "How a Protochain transaction moves from draft to on-chain through a defined sequence of states."
+---
+
+Every transaction in Protochain moves through a defined sequence of states before it can be submitted to Solana. The API enforces this sequence — you cannot sign a transaction that isn't compiled, or submit one that isn't fully signed. Understanding these states is essential for working with the Transaction Service.
+
+## State machine
+
+```
+DRAFT
+  │
+  │  CompileTransaction
+  ▼
+COMPILED
+  │
+  │  SignTransaction
+  ▼
+PARTIALLY_SIGNED ──── SignTransaction (remaining signers) ────┐
+                                                              │
+                                                              ▼
+                                                        FULLY_SIGNED
+                                                              │
+                                                              │  SubmitTransaction
+                                                              ▼
+                                                         (on-chain)
+```
+
+## States
+
+**DRAFT** — The transaction is being assembled. Instructions can be added or removed. The transaction has no compiled representation yet.
+
+**COMPILED** — Instructions have been serialized into the Solana transaction wire format. The transaction now has a `recent_blockhash` and can be estimated, simulated, or signed. No new instructions can be added after compilation.
+
+**PARTIALLY_SIGNED** — One or more signers have added their signatures, but not all required signers have signed. Multi-signer transactions pass through this state. Additional `SignTransaction` calls move the transaction toward `FULLY_SIGNED`.
+
+**FULLY_SIGNED** — All required signers have signed. The transaction is ready to submit. Check expiry before submitting if significant time has passed since compilation.
+
+## A typical transaction
+
+The most common path is a single-signer transaction. Here is what that looks like end to end.
+
+<Steps>
+
+<Step title="Build instructions">
+  Use the System Program Service or Token Program Service to construct what you want to do. Each method call returns a `SolanaInstruction` — it does not execute anything. Instructions are the building blocks you assemble into a transaction.
+</Step>
+
+<Step title="Call CompileTransaction">
+  Pass the draft transaction (with its instructions), a fee payer address, and optionally a `recent_blockhash`. The API serializes the instructions into the Solana wire format and sets the transaction state to `COMPILED`. If you don't provide a `recent_blockhash`, the service fetches the latest one automatically.
+</Step>
+
+<Step title="Estimate and simulate (optional)">
+  Call `EstimateTransaction` to get the expected compute units and fee before committing. Call `SimulateTransaction` to dry-run the transaction against the current ledger state. Both operations work on `COMPILED` transactions and do not mutate state.
+</Step>
+
+<Step title="Call SignTransaction">
+  Pass the compiled transaction and your signing key. For a single-signer transaction, this moves the transaction directly to `FULLY_SIGNED`. For multi-signer transactions, each call to `SignTransaction` adds a signature; the transaction moves through `PARTIALLY_SIGNED` until all required signers have signed.
+</Step>
+
+<Step title="Check expiry (if time has passed)">
+  Call `CheckIfTransactionIsExpired` before submitting if significant time has elapsed since compilation. A Solana transaction expires when its `recent_blockhash` ages out — approximately 150 slots (~2 minutes on mainnet). If the transaction has expired, you must recompile with a fresh blockhash.
+</Step>
+
+<Step title="Call SubmitTransaction">
+  Submit the fully signed transaction to the Solana network. `SubmitTransaction` returns immediately — it does not wait for on-chain confirmation. Use `MonitorTransaction` to track the transaction's progress after submission.
+</Step>
+
+</Steps>
+
+## Blockhash expiry
+
+<Note>
+  Compiled transactions have a limited validity window tied to their `recent_blockhash`. If you don't submit within approximately 150 slots (~2 minutes on mainnet), the transaction expires and you must recompile with a fresh blockhash. Use `CheckIfTransactionIsExpired` before submitting if time has passed since compilation.
+</Note>
+
+## What can go wrong
+
+Most state-related errors follow a predictable pattern: you called a method that requires a particular state, but the transaction is in the wrong state. Common examples:
+
+- Calling `SignTransaction` on a `DRAFT` transaction — you must compile first.
+- Calling `SubmitTransaction` on a `PARTIALLY_SIGNED` transaction — all signers must sign first.
+- Calling `SubmitTransaction` on an expired `FULLY_SIGNED` transaction — recompile to refresh the blockhash.
+
+When you get a state error, check which state the transaction is in and which state the method requires.
+
+---
+
+See the [Transaction Service](/api-reference/transaction/overview) reference for method details.

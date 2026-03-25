@@ -1,0 +1,400 @@
+---
+title: "Transfer SOL"
+description: "Build, sign, and submit a SOL transfer transaction end-to-end using the System Program and Transaction Service."
+---
+
+You have a funded devnet keypair from the [Quickstart](/guides/quickstart). This guide shows what comes next: your first real transaction. You'll move SOL between two accounts by building a transfer instruction, compiling it into a transaction, signing, submitting, and monitoring the result — using the System Program and Transaction Service together.
+
+## What you'll build
+
+A transaction that transfers lamports from one account to another using the System Program's Transfer instruction, compiled and submitted via the Transaction Service.
+
+## Prerequisites
+
+- Two funded Solana accounts (payer and recipient). See [Quickstart](/guides/quickstart) to generate and fund accounts on devnet.
+- A Protochain connection. See [Connecting to Protochain](/guides/connecting).
+
+## Build the transfer instruction
+
+The [System Program's Transfer method](/api-reference/system-program/transfer) returns a `SolanaInstruction` — it does not execute anything on-chain. The instruction describes the intent (move lamports from A to B); the Transaction Service executes it when you compile, sign, and submit. See [Instructions & Transactions](/concepts/instructions-and-transactions) for the underlying pattern.
+
+<CodeGroup>
+
+```go Go
+import (
+    "context"
+    "log"
+
+    "google.golang.org/grpc"
+    "google.golang.org/grpc/credentials/insecure"
+    system_v1 "github.com/meshtrade/protochain/lib/go/protochain/solana/program/system/v1"
+)
+
+conn, err := grpc.NewClient("YOUR_ENDPOINT:50051",
+    grpc.WithTransportCredentials(insecure.NewCredentials()),
+)
+if err != nil {
+    log.Fatalf("connect: %v", err)
+}
+defer conn.Close()
+
+systemClient := system_v1.NewServiceClient(conn)
+ctx := context.Background()
+
+transferResp, err := systemClient.Transfer(ctx, &system_v1.TransferRequest{
+    From:     "SenderPubKey111111111111111111111111111111",
+    To:       "RecipientPubKey11111111111111111111111111111",
+    Lamports: 1_000_000_000, // 1 SOL
+})
+if err != nil {
+    log.Fatalf("Transfer: %v", err)
+}
+instruction := transferResp.Instruction
+```
+
+```rust Rust
+use protochain::solana::program::system::v1::{service_client::ServiceClient, TransferRequest};
+
+let mut system_client = ServiceClient::connect("http://YOUR_ENDPOINT:50051").await?;
+
+let response = system_client.transfer(tonic::Request::new(TransferRequest {
+    from: "SenderPubKey111111111111111111111111111111".to_string(),
+    to: "RecipientPubKey11111111111111111111111111111".to_string(),
+    lamports: 1_000_000_000, // 1 SOL
+    ..Default::default()
+})).await?;
+let instruction = response.into_inner().instruction.unwrap();
+```
+
+```typescript TypeScript
+import * as grpc from '@grpc/grpc-js';
+import { ServiceClient, TransferRequest } from '@protochain/solana-system-program-v1';
+
+const systemClient = new ServiceClient(
+  'YOUR_ENDPOINT:50051',
+  grpc.credentials.createInsecure()
+);
+
+const req = new TransferRequest();
+req.setFrom('SenderPubKey111111111111111111111111111111');
+req.setTo('RecipientPubKey11111111111111111111111111111');
+req.setLamports(1_000_000_000); // 1 SOL
+
+systemClient.transfer(req, (err, response) => {
+  if (err) throw err;
+  const instruction = response.getInstruction();
+  // continue to compile step below
+});
+```
+
+</CodeGroup>
+
+## Compile the transaction
+
+Wrap the instruction in a `Transaction` object in DRAFT state, then call [CompileTransaction](/api-reference/transaction/compile-transaction). Protochain fetches a recent blockhash automatically when `recent_blockhash` is left empty — this is the standard pattern. The sender's public key is the fee payer.
+
+<CodeGroup>
+
+```go Go
+import transaction_v1 "github.com/meshtrade/protochain/lib/go/protochain/solana/transaction/v1"
+
+txnClient := transaction_v1.NewServiceClient(conn)
+
+draftTxn := &transaction_v1.Transaction{
+    Instructions: []*transaction_v1.SolanaInstruction{instruction},
+}
+
+compileResp, err := txnClient.CompileTransaction(ctx, &transaction_v1.CompileTransactionRequest{
+    Transaction: draftTxn,
+    FeePayer:    "SenderPubKey111111111111111111111111111111",
+    // recent_blockhash omitted — service fetches latest automatically
+})
+if err != nil {
+    log.Fatalf("CompileTransaction: %v", err)
+}
+compiledTxn := compileResp.Transaction
+// compiledTxn.State == TRANSACTION_STATE_COMPILED
+```
+
+```rust Rust
+use protochain::solana::transaction::v1::{
+    service_client::ServiceClient as TxnClient, CompileTransactionRequest, Transaction,
+    SolanaInstruction,
+};
+
+let mut txn_client = TxnClient::connect("http://YOUR_ENDPOINT:50051").await?;
+
+let draft_txn = Transaction {
+    instructions: vec![instruction],
+    ..Default::default()
+};
+
+let response = txn_client.compile_transaction(tonic::Request::new(CompileTransactionRequest {
+    transaction: Some(draft_txn),
+    fee_payer: "SenderPubKey111111111111111111111111111111".to_string(),
+    recent_blockhash: String::new(), // omit — service fetches latest
+    ..Default::default()
+})).await?;
+let compiled_txn = response.into_inner().transaction.unwrap();
+// compiled_txn.state == TRANSACTION_STATE_COMPILED
+```
+
+```typescript TypeScript
+import { ServiceClient as TxnClient, CompileTransactionRequest, Transaction } from '@protochain/solana-transaction-v1';
+
+const txnClient = new TxnClient(
+  'YOUR_ENDPOINT:50051',
+  grpc.credentials.createInsecure()
+);
+
+const draftTxn = new Transaction();
+draftTxn.setInstructionsList([instruction]);
+
+const compileReq = new CompileTransactionRequest();
+compileReq.setTransaction(draftTxn);
+compileReq.setFeePayer('SenderPubKey111111111111111111111111111111');
+// recent_blockhash omitted — service fetches latest
+
+txnClient.compileTransaction(compileReq, (err, response) => {
+  if (err) throw err;
+  const compiledTxn = response.getTransaction();
+  // compiledTxn.getState() == TRANSACTION_STATE_COMPILED
+});
+```
+
+</CodeGroup>
+
+## Sign the transaction
+
+Call [SignTransaction](/api-reference/transaction/sign-transaction) with the compiled transaction and the sender's private key. The transaction advances from COMPILED to FULLY_SIGNED state.
+
+<Warning>
+  Private keys are transmitted in plaintext over the gRPC connection. Always use TLS in production. Never call SignTransaction over an unencrypted connection with real keys.
+</Warning>
+
+<CodeGroup>
+
+```go Go
+signResp, err := txnClient.SignTransaction(ctx, &transaction_v1.SignTransactionRequest{
+    Transaction: compiledTxn,
+    SigningMethod: &transaction_v1.SignTransactionRequest_PrivateKeys{
+        PrivateKeys: &transaction_v1.SignWithPrivateKeys{
+            PrivateKeys: []string{"SenderPrivateKey111111111111111111111111111111"},
+        },
+    },
+})
+if err != nil {
+    log.Fatalf("SignTransaction: %v", err)
+}
+signedTxn := signResp.Transaction
+// signedTxn.State == TRANSACTION_STATE_FULLY_SIGNED
+```
+
+```rust Rust
+use protochain::solana::transaction::v1::{
+    SignTransactionRequest, SignWithPrivateKeys,
+    sign_transaction_request::SigningMethod,
+};
+
+let response = txn_client.sign_transaction(tonic::Request::new(SignTransactionRequest {
+    transaction: Some(compiled_txn),
+    signing_method: Some(SigningMethod::PrivateKeys(SignWithPrivateKeys {
+        private_keys: vec!["SenderPrivateKey111111111111111111111111111111".to_string()],
+    })),
+})).await?;
+let signed_txn = response.into_inner().transaction.unwrap();
+// signed_txn.state == TRANSACTION_STATE_FULLY_SIGNED
+```
+
+```typescript TypeScript
+import { SignTransactionRequest, SignWithPrivateKeys } from '@protochain/solana-transaction-v1';
+
+const signWithKeys = new SignWithPrivateKeys();
+signWithKeys.setPrivateKeysList(['SenderPrivateKey111111111111111111111111111111']);
+
+const signReq = new SignTransactionRequest();
+signReq.setTransaction(compiledTxn);
+signReq.setPrivateKeys(signWithKeys);
+
+txnClient.signTransaction(signReq, (err, response) => {
+  if (err) throw err;
+  const signedTxn = response.getTransaction();
+  // signedTxn.getState() == TRANSACTION_STATE_FULLY_SIGNED
+});
+```
+
+</CodeGroup>
+
+## Submit the transaction
+
+Call [SubmitTransaction](/api-reference/transaction/submit-transaction). The call returns immediately with a `signature` — it does not wait for on-chain confirmation.
+
+<Note>
+  `SUBMISSION_RESULT_SUBMITTED` means the transaction was accepted for broadcast, not confirmed on-chain. Pass the returned signature to MonitorTransaction to track the actual result.
+</Note>
+
+<CodeGroup>
+
+```go Go
+submitResp, err := txnClient.SubmitTransaction(ctx, &transaction_v1.SubmitTransactionRequest{
+    Transaction: signedTxn,
+})
+if err != nil {
+    log.Fatalf("SubmitTransaction: %v", err)
+}
+fmt.Printf("Signature: %s\n", submitResp.Signature)
+fmt.Printf("Result: %v\n", submitResp.SubmissionResult)
+
+if submitResp.SubmissionResult != transaction_v1.SubmissionResult_SUBMISSION_RESULT_SUBMITTED {
+    log.Fatalf("Submission failed: %s", submitResp.ErrorMessage)
+}
+signature := submitResp.Signature
+```
+
+```rust Rust
+use protochain::solana::transaction::v1::{SubmitTransactionRequest, SubmissionResult};
+
+let response = txn_client.submit_transaction(tonic::Request::new(SubmitTransactionRequest {
+    transaction: Some(signed_txn),
+    ..Default::default()
+})).await?;
+let result = response.into_inner();
+println!("Signature: {}", result.signature);
+
+if result.submission_result() != SubmissionResult::Submitted {
+    return Err(format!("Submission failed: {}", result.error_message).into());
+}
+let signature = result.signature;
+```
+
+```typescript TypeScript
+import { SubmitTransactionRequest, SubmissionResult } from '@protochain/solana-transaction-v1';
+
+const submitReq = new SubmitTransactionRequest();
+submitReq.setTransaction(signedTxn);
+
+txnClient.submitTransaction(submitReq, (err, response) => {
+  if (err) throw err;
+  console.log('Signature:', response.getSignature());
+
+  if (response.getSubmissionResult() !== SubmissionResult.SUBMISSION_RESULT_SUBMITTED) {
+    throw new Error(`Submission failed: ${response.getErrorMessage()}`);
+  }
+  const signature = response.getSignature();
+  // pass signature to monitorTransaction below
+});
+```
+
+</CodeGroup>
+
+## Monitor the result
+
+Pass the signature from SubmitTransaction to [MonitorTransaction](/api-reference/transaction/monitor-transaction). The stream emits a status update each time the transaction advances, and closes when a terminal state is reached: FINALIZED, FAILED, DROPPED, or TIMEOUT.
+
+<CodeGroup>
+
+```go Go
+import "io"
+
+stream, err := txnClient.MonitorTransaction(ctx, &transaction_v1.MonitorTransactionRequest{
+    Signature: signature,
+})
+if err != nil {
+    log.Fatalf("MonitorTransaction: %v", err)
+}
+
+for {
+    resp, err := stream.Recv()
+    if err == io.EOF {
+        break // Stream closed by server
+    }
+    if err != nil {
+        log.Printf("Stream error: %v", err)
+        break
+    }
+
+    fmt.Printf("Status: %v (slot %d)\n", resp.Status, resp.Slot)
+
+    switch resp.Status {
+    case transaction_v1.TransactionStatus_TRANSACTION_STATUS_FINALIZED:
+        fmt.Println("Transfer finalized")
+        return
+    case transaction_v1.TransactionStatus_TRANSACTION_STATUS_FAILED:
+        log.Fatalf("Transaction failed: %s", resp.ErrorMessage)
+    case transaction_v1.TransactionStatus_TRANSACTION_STATUS_DROPPED:
+        log.Fatal("Transaction dropped — consider resubmitting")
+    case transaction_v1.TransactionStatus_TRANSACTION_STATUS_TIMEOUT:
+        log.Fatal("Monitoring timed out — check GetTransaction for current status")
+    }
+}
+```
+
+```rust Rust
+use protochain::solana::transaction::v1::{MonitorTransactionRequest, TransactionStatus};
+
+let mut stream = txn_client.monitor_transaction(tonic::Request::new(MonitorTransactionRequest {
+    signature: signature.clone(),
+    ..Default::default()
+})).await?.into_inner();
+
+while let Some(resp) = stream.message().await? {
+    println!("Status: {:?} (slot {})", resp.status(), resp.slot);
+
+    match resp.status() {
+        TransactionStatus::Finalized => {
+            println!("Transfer finalized");
+            break;
+        }
+        TransactionStatus::Failed => {
+            return Err(format!("Transaction failed: {}", resp.error_message).into());
+        }
+        TransactionStatus::Dropped => {
+            return Err("Transaction dropped — consider resubmitting".into());
+        }
+        TransactionStatus::Timeout => {
+            return Err("Monitoring timed out — check GetTransaction for current status".into());
+        }
+        _ => {} // RECEIVED, PROCESSED, CONFIRMED — stream continues
+    }
+}
+```
+
+```typescript TypeScript
+import { MonitorTransactionRequest, TransactionStatus } from '@protochain/solana-transaction-v1';
+
+const monitorReq = new MonitorTransactionRequest();
+monitorReq.setSignature(signature);
+
+const stream = txnClient.monitorTransaction(monitorReq);
+
+stream.on('data', (response) => {
+  const status = response.getStatus();
+  console.log(`Status: ${status} (slot ${response.getSlot()})`);
+
+  switch (status) {
+    case TransactionStatus.TRANSACTION_STATUS_FINALIZED:
+      console.log('Transfer finalized');
+      break;
+    case TransactionStatus.TRANSACTION_STATUS_FAILED:
+      console.error('Transaction failed:', response.getErrorMessage());
+      break;
+    case TransactionStatus.TRANSACTION_STATUS_DROPPED:
+      console.error('Transaction dropped — consider resubmitting');
+      break;
+    case TransactionStatus.TRANSACTION_STATUS_TIMEOUT:
+      console.error('Monitoring timed out — check GetTransaction for current status');
+      break;
+  }
+});
+
+stream.on('end', () => console.log('Stream closed'));
+stream.on('error', (err) => console.error('Stream error:', err));
+```
+
+</CodeGroup>
+
+## Next steps
+
+- Create a token mint: [Create a Token](/guides/create-token)
+- Monitor multiple transactions with reconnection logic: [Monitor Transactions](/guides/monitor-transaction)
+- Full Transfer reference: [System Program Transfer](/api-reference/system-program/transfer)
